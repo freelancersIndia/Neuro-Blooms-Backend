@@ -1,0 +1,24 @@
+from rest_framework.pagination import PageNumberPagination
+from apps.accounts.utils.responses import success_response
+
+class StandardPageNumberPagination(PageNumberPagination):
+    """
+    Standard pagination class returning responses in the custom envelope.
+    """
+    page_size = 20
+    max_page_size = 100
+    page_size_query_param = 'page_size'
+
+    def get_paginated_response(self, data):
+        view = self.request.parser_context.get('view') if self.request else None
+        message = getattr(view, 'pagination_message', 'Data retrieved successfully.')
+        
+        return success_response(
+            message=message,
+            data={
+                'count': self.page.paginator.count,
+                'next': self.get_next_link(),
+                'previous': self.get_previous_link(),
+                'results': data
+            }
+        )

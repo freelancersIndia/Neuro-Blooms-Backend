@@ -18,6 +18,13 @@ class ActivityType:
     ACCOUNT_LOCKED = 'ACCOUNT_LOCKED'
     SESSION_REVOKED = 'SESSION_REVOKED'
 
+    # Hardening Events
+    ROLE_SEEDED = 'ROLE_SEEDED'
+    INITIAL_ADMIN_CREATED = 'INITIAL_ADMIN_CREATED'
+    ACCOUNT_UNLOCKED = 'ACCOUNT_UNLOCKED'
+    EMAIL_VERIFICATION_SENT = 'EMAIL_VERIFICATION_SENT'
+    EMAIL_VERIFIED = 'EMAIL_VERIFIED'
+
     CHOICES = [
         (LOGIN, 'Login'),
         (LOGOUT, 'Logout'),
@@ -32,4 +39,9 @@ class ActivityType:
         (USER_DISABLED, 'User Disabled'),
         (ACCOUNT_LOCKED, 'Account Locked'),
         (SESSION_REVOKED, 'Session Revoked'),
+        (ROLE_SEEDED, 'Role Seeded'),
+        (INITIAL_ADMIN_CREATED, 'Initial Admin Created'),
+        (ACCOUNT_UNLOCKED, 'Account Unlocked'),
+        (EMAIL_VERIFICATION_SENT, 'Email Verification Sent'),
+        (EMAIL_VERIFIED, 'Email Verified'),
     ]

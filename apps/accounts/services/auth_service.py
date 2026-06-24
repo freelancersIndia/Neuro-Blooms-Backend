@@ -85,16 +85,13 @@ class AuthService:
             token = RefreshToken(refresh_token)
             jti = token.payload.get('jti')
 
-            # Deactivate device session
+            # 1. Blacklist refresh token
+            token.blacklist()
+
+            # 2. Deactivate device session
             SessionService.deactivate_session(jti)
 
-            # Try to blacklist standard-wise if blacklisting app is configured
-            try:
-                token.blacklist()
-            except AttributeError:
-                pass
-
-            # Log logout event
+            # 3. Log logout event
             user_id = token.payload.get('user_id')
             user = User.objects.filter(id=user_id).first()
             if user:

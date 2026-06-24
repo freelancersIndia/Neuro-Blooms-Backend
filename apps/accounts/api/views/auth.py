@@ -6,6 +6,7 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.utils.ip import get_client_ip
+from apps.accounts.utils.responses import success_response, error_response
 from apps.accounts.services.auth_service import AuthService
 from apps.accounts.services.otp_service import OTPService
 from apps.accounts.services.session_service import SessionService
@@ -39,29 +40,42 @@ class LoginView(APIView):
                 password=password,
                 ip_address=ip_address
             )
-            return Response({
-                'detail': 'Credentials verified. A login verification OTP has been sent to your email.'
-            }, status=status.HTTP_200_OK)
+            return success_response(
+                message='Credentials verified. A login verification OTP has been sent to your email.',
+                data=None
+            )
         except ValueError as e:
-            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(message=str(e), errors=None, status_code=status.HTTP_400_BAD_REQUEST)
 
 class LogoutView(APIView):
-    permission_classes = [AllowAny]  # Let refresh token validation be handled in the service
+    permission_classes = [AllowAny]
 
     def post(self, request):
         refresh_token = request.data.get('refresh')
         if not refresh_token:
-            return Response({'detail': 'Refresh token is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                message='Refresh token is required.',
+                errors=None,
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
 
         ip_address = get_client_ip(request)
         try:
             AuthService.logout_user(refresh_token, ip_address)
-            return Response({'detail': 'Successfully logged out.'}, status=status.HTTP_200_OK)
+            return success_response(message='Successfully logged out.', data=None)
         except ValueError as e:
-            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(message=str(e), errors=None, status_code=status.HTTP_400_BAD_REQUEST)
 
 class CustomTokenRefreshView(TokenRefreshView):
     serializer_class = CustomTokenRefreshSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        return success_response(
+            message="Token refreshed successfully.",
+            data=serializer.validated_data
+        )
 
 class SendOTPView(APIView):
     permission_classes = [AllowAny]
@@ -81,7 +95,10 @@ class SendOTPView(APIView):
             # Silently accept to prevent email enumeration
             pass
 
-        return Response({'detail': 'If the email exists, an OTP has been sent.'}, status=status.HTTP_200_OK)
+        return success_response(
+            message='If the email exists, an OTP has been sent.',
+            data=None
+        )
 
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
@@ -105,16 +122,19 @@ class VerifyOTPView(APIView):
                     ip_address=ip_address,
                     user_agent=user_agent
                 )
-                return Response({
-                    'access': auth_data['access'],
-                    'refresh': auth_data['refresh'],
-                    'user': {
-                        'email': auth_data['user'].email,
-                        'first_name': auth_data['user'].first_name,
-                        'last_name': auth_data['user'].last_name,
-                        'roles': [role.name for role in auth_data['user'].roles.all()]
+                return success_response(
+                    message="OTP verified successfully.",
+                    data={
+                        'access': auth_data['access'],
+                        'refresh': auth_data['refresh'],
+                        'user': {
+                            'email': auth_data['user'].email,
+                            'first_name': auth_data['user'].first_name,
+                            'last_name': auth_data['user'].last_name,
+                            'roles': [role.name for role in auth_data['user'].roles.all()]
+                        }
                     }
-                }, status=status.HTTP_200_OK)
+                )
 
             token = OTPService.verify_otp(email, otp_code, purpose, ip_address)
 
@@ -126,18 +146,55 @@ class VerifyOTPView(APIView):
 
                 ActivityLog.objects.create(
                     user=user,
-                    action=ActivityType.USER_UPDATED,
-                    description="User email verified via OTP.",
+                    action=ActivityType.EMAIL_VERIFIED,
+                    description="User email verified successfully via OTP.",
                     ip_address=ip_address
                 )
+                return success_response(
+                    message="Email verified successfully.",
+                    data=None
+                )
 
-            return Response({
-                'detail': 'OTP verified successfully.',
-                'token': token
-            }, status=status.HTTP_200_OK)
+            return success_response(
+                message='OTP verified successfully.',
+                data={'token': token}
+            )
 
         except ValueError as e:
-            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(message=str(e), errors=None, status_code=status.HTTP_400_BAD_REQUEST)
+
+class ResendVerificationView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email')
+        if not email:
+            return error_response(
+                message="Validation failed.",
+                errors={"email": ["This field is required."]},
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
+
+        ip_address = get_client_ip(request)
+        try:
+            user = User.objects.get(email=email)
+            # Only send if user is not already verified
+            if not user.is_verified:
+                OTPService.generate_otp(user, OTPPurpose.EMAIL_VERIFICATION, ip_address)
+                # Log email verification sent
+                ActivityLog.objects.create(
+                    user=user,
+                    action=ActivityType.EMAIL_VERIFICATION_SENT,
+                    description="Email verification OTP sent to user.",
+                    ip_address=ip_address
+                )
+        except User.DoesNotExist:
+            pass
+
+        return success_response(
+            message="If the email exists and is unverified, a verification OTP has been sent.",
+            data=None
+        )
 
 class ForgotPasswordView(APIView):
     permission_classes = [AllowAny]
@@ -150,7 +207,10 @@ class ForgotPasswordView(APIView):
         ip_address = get_client_ip(request)
 
         AuthService.forgot_password(email, ip_address)
-        return Response({'detail': 'If the email exists, a password reset OTP has been sent.'}, status=status.HTTP_200_OK)
+        return success_response(
+            message='If the email exists, a password reset OTP has been sent.',
+            data=None
+        )
 
 class ResetPasswordView(APIView):
     permission_classes = [AllowAny]
@@ -165,9 +225,9 @@ class ResetPasswordView(APIView):
 
         try:
             AuthService.reset_password(token, new_password, ip_address)
-            return Response({'detail': 'Password has been reset successfully.'}, status=status.HTTP_200_OK)
+            return success_response(message='Password has been reset successfully.', data=None)
         except ValueError as e:
-            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(message=str(e), errors=None, status_code=status.HTTP_400_BAD_REQUEST)
 
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
@@ -182,6 +242,6 @@ class ChangePasswordView(APIView):
 
         try:
             AuthService.change_password(request.user, current_password, new_password, ip_address)
-            return Response({'detail': 'Password has been changed successfully.'}, status=status.HTTP_200_OK)
+            return success_response(message='Password has been changed successfully.', data=None)
         except ValueError as e:
-            return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(message=str(e), errors=None, status_code=status.HTTP_400_BAD_REQUEST)

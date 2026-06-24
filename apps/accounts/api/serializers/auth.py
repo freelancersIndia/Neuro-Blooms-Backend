@@ -20,18 +20,24 @@ class UserSessionSerializer(serializers.ModelSerializer):
 
 class CustomTokenRefreshSerializer(TokenRefreshSerializer):
     def validate(self, attrs):
-        # First perform standard SimpleJWT validation (checks expiry, signature etc.)
-        data = super().validate(attrs)
+        try:
+            # First perform standard SimpleJWT validation (checks expiry, signature, blacklist etc.)
+            data = super().validate(attrs)
+        except Exception:
+            raise InvalidToken("Session expired or revoked.")
 
         # Get JTI from refresh token in input
-        refresh_token = RefreshToken(attrs['refresh'])
-        jti = refresh_token.payload.get('jti')
+        try:
+            refresh_token = RefreshToken(attrs['refresh'])
+            jti = refresh_token.payload.get('jti')
+        except Exception:
+            raise InvalidToken("Session expired or revoked.")
 
         # Check if corresponding UserSession exists and is active
         try:
             session = UserSession.objects.get(refresh_token_jti=jti, is_active=True)
         except UserSession.DoesNotExist:
-            raise InvalidToken("This session is no longer active or invalid.")
+            raise InvalidToken("Session expired or revoked.")
 
         now = timezone.now()
         # If SimpleJWT rotated the refresh token, update JTI in session

@@ -37,8 +37,7 @@ class OTPService:
         elif purpose == OTPPurpose.PASSWORD_RESET:
             EmailService.send_password_reset_otp(user.email, otp_code)
         elif purpose == OTPPurpose.EMAIL_VERIFICATION:
-            # We can use login OTP format for email verification
-            EmailService.send_login_otp(user.email, otp_code)
+            EmailService.send_email_verification_otp(user.email, otp_code)
 
         return otp
 

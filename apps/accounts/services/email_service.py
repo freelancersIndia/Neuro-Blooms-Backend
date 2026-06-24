@@ -72,3 +72,14 @@ class EmailService:
             html_message=html_message,
         )
 
+    @staticmethod
+    def send_email_verification_otp(email: str, otp_code: str) -> None:
+        context = {'otp_code': otp_code}
+        html_message = render_to_string('emails/email_verification.html', context)
+        EmailService._send_email_safe(
+            subject='Verify Your Neuro Blooms Email',
+            message=f'Your email verification OTP is {otp_code}. It is valid for 15 minutes.',
+            recipient_list=[email],
+            html_message=html_message,
+        )
+

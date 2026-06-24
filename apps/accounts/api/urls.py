@@ -9,6 +9,7 @@ from apps.accounts.api.views import (
     ForgotPasswordView,
     ResetPasswordView,
     ChangePasswordView,
+    ResendVerificationView,
     ProfileView,
     UserSessionViewSet,
     UserAdminViewSet,
@@ -26,6 +27,7 @@ urlpatterns = [
     path('auth/login/', LoginView.as_view(), name='auth_login'),
     path('auth/logout/', LogoutView.as_view(), name='auth_logout'),
     path('auth/refresh/', CustomTokenRefreshView.as_view(), name='token_refresh'),
+    path('auth/resend-verification/', ResendVerificationView.as_view(), name='auth_resend_verification'),
 
     # OTP endpoints
     path('auth/send-otp/', SendOTPView.as_view(), name='auth_send_otp'),

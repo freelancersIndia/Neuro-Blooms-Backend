@@ -7,6 +7,7 @@ from .auth import (
     ForgotPasswordView,
     ResetPasswordView,
     ChangePasswordView,
+    ResendVerificationView,
 )
 from .profile import ProfileView
 from .sessions import UserSessionViewSet
@@ -22,6 +23,7 @@ __all__ = [
     'ForgotPasswordView',
     'ResetPasswordView',
     'ChangePasswordView',
+    'ResendVerificationView',
     'ProfileView',
     'UserSessionViewSet',
     'UserAdminViewSet',

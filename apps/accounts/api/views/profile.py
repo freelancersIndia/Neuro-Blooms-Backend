@@ -6,13 +6,17 @@ from apps.accounts.api.serializers.profile import ProfileSerializer
 from apps.accounts.models.activity_log import ActivityLog
 from apps.accounts.constants.activity_types import ActivityType
 from apps.accounts.utils.ip import get_client_ip
+from apps.accounts.utils.responses import success_response
 
 class ProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         serializer = ProfileSerializer(request.user)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return success_response(
+            message="Profile retrieved successfully.",
+            data=serializer.data
+        )
 
     def patch(self, request):
         serializer = ProfileSerializer(request.user, data=request.data, partial=True)
@@ -28,4 +32,7 @@ class ProfileView(APIView):
             ip_address=ip_address
         )
 
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return success_response(
+            message="Profile updated successfully.",
+            data=serializer.data
+        )
