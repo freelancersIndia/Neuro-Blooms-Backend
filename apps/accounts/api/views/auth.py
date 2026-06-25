@@ -131,6 +131,7 @@ class VerifyOTPView(APIView):
                             'email': auth_data['user'].email,
                             'first_name': auth_data['user'].first_name,
                             'last_name': auth_data['user'].last_name,
+                            'profile_image': request.build_absolute_uri(auth_data['user'].profile_image.url) if auth_data['user'].profile_image else None,
                             'roles': [role.name for role in auth_data['user'].roles.all()]
                         }
                     }

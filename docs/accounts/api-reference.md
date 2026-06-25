@@ -31,14 +31,15 @@
     - [Logout All Sessions (`POST /api/v1/sessions/logout-all/`)](#14-logout-all-sessions)
 8. [User Management API Endpoint Specifications (Admin Only)](#8-user-management-api-endpoint-specifications-admin-only)
     - [List Users (`GET /api/v1/users/`)](#15-list-users)
-    - [Create User (`POST /api/v1/users/`)](#16-create-user)
-    - [Get User Detail (`GET /api/v1/users/{id}/`)](#17-get-user-detail)
-    - [Update User (`PUT /api/v1/users/{id}/`)](#18-update-user)
-    - [Partial Update User (`PATCH /api/v1/users/{id}/`)](#19-partial-update-user)
-    - [Delete User (`DELETE /api/v1/users/{id}/`)](#20-delete-user)
+    - [User Statistics (`GET /api/v1/users/statistics/`)](#16-user-statistics)
+    - [Create User (`POST /api/v1/users/`)](#17-create-user)
+    - [Get User Detail (`GET /api/v1/users/{id}/`)](#18-get-user-detail)
+    - [Update User (`PATCH /api/v1/users/{id}/`)](#19-update-user)
+    - [Lock User Account (`POST /api/v1/users/{id}/lock/`)](#20-lock-user-account)
     - [Unlock User Account (`POST /api/v1/users/{id}/unlock/`)](#21-unlock-user-account)
+    - [Delete User (`DELETE /api/v1/users/{id}/`)](#22-delete-user)
 9. [Security Auditing API Endpoint Specifications (Admin Only)](#9-security-auditing-api-endpoint-specifications-admin-only)
-    - [List Security Logs (`GET /api/v1/security-logs/`)](#22-list-security-logs)
+    - [List Security Logs (`GET /api/v1/security-logs/`)](#23-list-security-logs)
 10. [Role Persistence and System Roles Catalog](#10-role-persistence-and-system-roles-catalog)
 11. [Best Practices & Security Hardening Guidelines](#11-best-practices--security-hardening-guidelines)
 
@@ -378,6 +379,7 @@ Verifies the 6-digit OTP code submitted by the user. The behavior varies dependi
       "email": "doctor@neuroblooms.com",
       "first_name": "John",
       "last_name": "Doe",
+      "profile_image": "http://localhost:8000/media/profiles/avatar.png",
       "roles": ["DOCTOR"]
     }
   }
@@ -747,10 +749,10 @@ Lists all registered user accounts with pagination, search, and filters.
 
 #### Query Parameters
 * **page**: Page number (default: `1`).
-* **page_size**: Number of records per page (default: `20`, max: `100`).
-* **search**: Search query matching `first_name`, `last_name`, `email`, or `phone_number`.
-* **role**: Filter by role name (case-insensitive, e.g. `doctor`).
-* **is_active**: Filter by active status (`true` or `false`).
+* **page_size**: Number of records per page (default: `12`, max: `100`).
+* **search**: Case-insensitive search query matching `first_name`, `last_name`, `email`, `phone_number`, or computed full name (`first_name + last_name`).
+* **role**: Filter by role name (case-insensitive, e.g. `DOCTOR`, `RECEPTIONIST`). Supports only valid system seeded roles; invalid roles return empty results.
+* **is_active**: Filter by active status (`true` or `false`). Invalid values return validation errors.
 
 #### Success Response
 * **Status**: `200 OK`
@@ -760,24 +762,25 @@ Lists all registered user accounts with pagination, search, and filters.
   "success": true,
   "message": "Users retrieved successfully.",
   "data": {
-    "count": 1,
-    "next": null,
+    "count": 124,
+    "page": 1,
+    "page_size": 12,
+    "total_pages": 11,
+    "next": "https://api.neuroblooms.com/api/v1/users/?page=2",
     "previous": null,
     "results": [
       {
         "id": "e402fdbe-389d-4001-a189-e2b202c4819d",
+        "full_name": "John Doe",
         "email": "doctor@neuroblooms.com",
-        "phone_number": "1234567890",
-        "first_name": "John",
-        "last_name": "Doe",
+        "phone_number": "9876543210",
         "profile_image": null,
-        "is_active": true,
-        "is_verified": true,
-        "role_names": [
+        "roles": [
           "DOCTOR"
         ],
-        "created_at": "2026-06-20T10:00:00Z",
-        "updated_at": "2026-06-23T14:30:00Z"
+        "is_verified": true,
+        "is_active": true,
+        "created_at": "2026-06-20T10:00:00Z"
       }
     ]
   }
@@ -786,210 +789,423 @@ Lists all registered user accounts with pagination, search, and filters.
 
 ---
 
-### 16. Create User
+### 16. User Statistics
 #### Endpoint
-`POST /users/`
+`GET /users/statistics/`
 
 #### Authentication Requirement
 `IsAuthenticated` + `IsAdmin`
 
 #### Description
-Creates a new user account, assigns their roles, and sends a welcome email containing their credentials.
+Returns a summary of system user counts by verification and active statuses for the administrator dashboard. Computes results efficiently using database aggregation queries.
 
-#### Request Payload
+#### Success Response
+* **Status**: `200 OK`
+* **Payload**:
 ```json
 {
-  "email": "receptionist@neuroblooms.com",
-  "first_name": "Alice",
-  "last_name": "Smith",
-  "password": "TempPassword123",
-  "roles": [
-    "RECEPTIONIST"
-  ],
-  "phone_number": "5551234567"
+  "success": true,
+  "message": "User statistics retrieved successfully.",
+  "data": {
+    "total_users": 120,
+    "verified_users": 97,
+    "active_users": 102,
+    "inactive_users": 18
+  }
+}
+```
+
+---
+
+### 17. Create User
+#### Endpoint
+`POST /api/v1/users/`
+
+#### Authentication & Authorization
+- **Authentication**: JWT Required (`Bearer <Token>`)
+- **Permissions**: `IsAuthenticated` and `IsAdmin` (Only ADMIN users can access this endpoint. Non-admin users will receive `403 Forbidden`).
+
+#### Description
+Creates a new system user, assigns one or more system roles, hashes their password, stores the profile image (if uploaded), and logs the administrative creation action.
+
+#### Request Headers
+- `Authorization: Bearer <JWT_ACCESS_TOKEN>`
+- `Content-Type: multipart/form-data` or `application/json` (multipart/form-data is required if uploading a `profile_image`)
+
+#### Request Fields
+| Field | Required | Type | Max Length / Constraints | Description / Notes |
+| :--- | :---: | :--- | :--- | :--- |
+| `first_name` | ✅ | String | 150 characters | First name of the user. |
+| `last_name` | ✅ | String | 150 characters | Last name of the user. |
+| `email` | ✅ | String (Email) | Must be unique | Unique, valid email address. |
+| `phone_number` | ❌ | String | Must be unique if provided | Optional. Unique mobile or landline phone number. Blank values are stored as `null` in the DB. |
+| `profile_image` | ❌ | File (Image) | Image format | Optional. User profile photo file. |
+| `password` | ✅ | String | Minimum 8 characters | Validated against Django password validators. Automatically hashed using `set_password()`. |
+| `roles` | ✅ | List of Strings | Cannot be empty, must be valid | Array of role names (e.g. `["ADMIN", "DOCTOR"]`). Duplicate roles are rejected. |
+| `is_active` | ❌ | Boolean | Default: `true` | Indicates if the user account is active. |
+| `is_verified` | ❌ | Boolean | Default: `false` | Indicates if the user's email is verified. |
+
+*Note: The `is_staff` and `is_superuser` fields must never be accepted from the frontend. The backend always sets `is_staff = True` for all created users, and `is_superuser = False`.*
+
+#### Password Hashing & Security
+The password is never stored in plain text. It is checked against configured Django password validators and hashed using Django's standard `set_password()` helper.
+
+#### Role Assignment
+Roles passed in the request (e.g. `["ADMIN", "DOCTOR"]`) are validated for existence, deduplicated, and mapped to the user using the `UserRole` intermediate model.
+
+#### Activity Logging
+Every successful user creation logs an administrative action in the system audit logs:
+- **Action**: `USER_CREATED`
+- **Description**: `Admin <admin_email> created user <created_user_email>.`
+- **Stored Data**: Admin User ID, Client IP Address, Action type, Description.
+
+#### Request Example (JSON)
+```json
+{
+    "first_name": "Krishna",
+    "last_name": "Kolluri",
+    "email": "krishna@gmail.com",
+    "phone_number": "9876543210",
+    "password": "SecurePassword@123",
+    "roles": [
+        "ADMIN",
+        "DOCTOR"
+    ],
+    "is_active": true,
+    "is_verified": false
 }
 ```
 
 #### Success Response
 * **Status**: `201 Created`
-* **Payload**:
+* **Response Body**:
 ```json
 {
-  "success": true,
-  "message": "User created successfully.",
-  "data": {
-    "id": "4bc9861e-128a-4cce-9a88-29be11ea2b7d",
-    "email": "receptionist@neuroblooms.com",
-    "phone_number": "5551234567",
-    "first_name": "Alice",
-    "last_name": "Smith",
-    "profile_image": null,
-    "is_active": true,
-    "is_verified": false,
-    "role_names": [
-      "RECEPTIONIST"
-    ],
-    "created_at": "2026-06-24T01:15:00Z",
-    "updated_at": "2026-06-24T01:15:00Z"
-  }
+    "success": true,
+    "message": "User created successfully.",
+    "data": {
+        "id": "4bc9861e-128a-4cce-9a88-29be11ea2b7d",
+        "first_name": "Krishna",
+        "last_name": "Kolluri",
+        "full_name": "Krishna Kolluri",
+        "email": "krishna@gmail.com",
+        "phone_number": "9876543210",
+        "profile_image": "https://api.neuroblooms.com/media/profiles/krishna_profile.jpg",
+        "roles": [
+            "ADMIN",
+            "DOCTOR"
+        ],
+        "is_active": true,
+        "is_verified": false,
+        "created_at": "2026-06-25T10:30:00Z"
+    }
 }
 ```
 
+#### Error Responses
+* **401 Unauthorized**:
+  ```json
+  {
+      "success": false,
+      "message": "Given token not valid for any token type",
+      "errors": null
+  }
+  ```
+* **403 Forbidden**:
+  ```json
+  {
+      "success": false,
+      "message": "You do not have permission to perform this action.",
+      "errors": null
+  }
+  ```
+* **400 Bad Request (Duplicate Email)**:
+  ```json
+  {
+      "success": false,
+      "message": "Validation failed.",
+      "errors": {
+          "email": [
+              "User with this email already exists."
+          ]
+      }
+  }
+  ```
+* **400 Bad Request (Invalid Role)**:
+  ```json
+  {
+      "success": false,
+      "message": "Validation failed.",
+      "errors": {
+          "roles": [
+              "Invalid role: MANAGER"
+          ]
+      }
+  }
+  ```
+
 ---
 
-### 17. Get User Detail
+### 18. Get User Detail
 #### Endpoint
-`GET /users/{id}/`
+`GET /api/v1/users/{id}/`
 
-#### Authentication Requirement
-`IsAuthenticated` + `IsAdmin`
+#### Authentication & Authorization
+- **Authentication**: JWT Required (`Bearer <Token>`)
+- **Permissions**: `IsAuthenticated` and `IsAdmin`
+
+#### Description
+Retrieves full details for a specific user, including their name, contact information, role mapping, account statuses (such as whether they are active, verified, or locked), and failed login attempt counts.
+
+#### Request Headers
+- `Authorization: Bearer <JWT_ACCESS_TOKEN>`
 
 #### Success Response
 * **Status**: `200 OK`
 * **Payload**:
 ```json
 {
-  "success": true,
-  "message": "User retrieved successfully.",
-  "data": {
-    "id": "4bc9861e-128a-4cce-9a88-29be11ea2b7d",
-    "email": "receptionist@neuroblooms.com",
-    "phone_number": "5551234567",
-    "first_name": "Alice",
-    "last_name": "Smith",
-    "profile_image": null,
-    "is_active": true,
-    "is_verified": false,
-    "role_names": [
-      "RECEPTIONIST"
-    ],
-    "created_at": "2026-06-24T01:15:00Z",
-    "updated_at": "2026-06-24T01:15:00Z"
-  }
+    "success": true,
+    "message": "User details retrieved successfully.",
+    "data": {
+        "id": "b04e5a0d-c197-46a3-ab13-0413a7d9359b",
+        "first_name": "Doctor",
+        "last_name": "User",
+        "full_name": "Doctor User",
+        "email": "doctor_mgmt@test.com",
+        "phone_number": "1234567890",
+        "profile_image": null,
+        "roles": [
+            "DOCTOR"
+        ],
+        "is_active": true,
+        "is_verified": false,
+        "is_locked": false,
+        "failed_login_attempts": 0,
+        "created_at": "2026-06-25T10:00:00Z"
+    }
 }
 ```
 
+#### Error Responses
+* **401 Unauthorized**:
+  ```json
+  {
+      "success": false,
+      "message": "Given token not valid for any token type",
+      "errors": null
+  }
+  ```
+* **403 Forbidden**:
+  ```json
+  {
+      "success": false,
+      "message": "You do not have permission to perform this action.",
+      "errors": null
+  }
+  ```
+* **404 Not Found**:
+  ```json
+  {
+      "success": false,
+      "message": "User not found.",
+      "errors": null
+  }
+  ```
+
 ---
 
-### 18. Update User
+### 19. Update User
 #### Endpoint
-`PUT /users/{id}/`
+`PATCH /api/v1/users/{id}/`
 
-#### Authentication Requirement
-`IsAuthenticated` + `IsAdmin`
+#### Authentication & Authorization
+- **Authentication**: JWT Required (`Bearer <Token>`)
+- **Permissions**: `IsAuthenticated` and `IsAdmin`
 
 #### Description
-Replaces an existing user's details. All non-read-only fields must be provided in the payload.
+Partially updates a specific user account's profile details and role mappings. Unspecified fields remain unchanged. Logs a `USER_UPDATED` administrative event.
 
-#### Request Payload
+#### Request Headers
+- `Authorization: Bearer <JWT_ACCESS_TOKEN>`
+- `Content-Type: application/json`
+
+#### Request Fields
+| Field | Required | Type | Constraints / Description |
+| :--- | :---: | :--- | :--- |
+| `first_name` | ❌ | String | First name. Strip whitespace. |
+| `last_name` | ❌ | String | Last name. Strip whitespace. |
+| `email` | ❌ | String (Email) | Must be unique. Stored in lowercase. |
+| `phone_number` | ❌ | String | Must be unique. Blank is stored as `null`. |
+| `profile_image` | ❌ | File (Image) | Optional profile picture update. |
+| `roles` | ❌ | List of Strings | Replacing role mapping. Duplicate or invalid roles are rejected. |
+| `is_active` | ❌ | Boolean | Account status. |
+| `is_verified` | ❌ | Boolean | Verification status. |
+
+#### Request Example (JSON)
 ```json
 {
-  "email": "receptionist@neuroblooms.com",
-  "first_name": "Alice",
-  "last_name": "Jones",
-  "is_active": true,
-  "is_verified": true,
-  "roles": [
-    "RECEPTIONIST",
-    "DOCTOR"
-  ],
-  "phone_number": "5551234567"
+    "first_name": "UpdatedName",
+    "roles": [
+        "DOCTOR",
+        "RECEPTIONIST"
+    ],
+    "phone_number": "1122334455"
 }
 ```
 
 #### Success Response
 * **Status**: `200 OK`
-* **Payload**:
+* **Response Body**:
 ```json
 {
-  "success": true,
-  "message": "User updated successfully.",
-  "data": {
-    "id": "4bc9861e-128a-4cce-9a88-29be11ea2b7d",
-    "email": "receptionist@neuroblooms.com",
-    "phone_number": "5551234567",
-    "first_name": "Alice",
-    "last_name": "Jones",
-    "profile_image": null,
-    "is_active": true,
-    "is_verified": true,
-    "role_names": [
-      "RECEPTIONIST",
-      "DOCTOR"
-    ],
-    "created_at": "2026-06-24T01:15:00Z",
-    "updated_at": "2026-06-24T01:20:00Z"
-  }
+    "success": true,
+    "message": "User updated successfully.",
+    "data": {
+        "id": "b04e5a0d-c197-46a3-ab13-0413a7d9359b",
+        "first_name": "UpdatedName",
+        "last_name": "User",
+        "full_name": "UpdatedName User",
+        "email": "doctor_mgmt@test.com",
+        "phone_number": "1122334455",
+        "profile_image": null,
+        "roles": [
+            "DOCTOR",
+            "RECEPTIONIST"
+        ],
+        "is_active": true,
+        "is_verified": false,
+        "is_locked": false,
+        "failed_login_attempts": 0,
+        "created_at": "2026-06-25T10:00:00Z"
+    }
 }
 ```
 
+#### Error Responses
+* **400 Bad Request (Duplicate Email or Phone)**:
+  ```json
+  {
+      "success": false,
+      "message": "Validation failed.",
+      "errors": {
+          "phone_number": [
+              "User with this phone number already exists."
+          ]
+      }
+  }
+  ```
+
 ---
 
-### 19. Partial Update User
+### 20. Lock User Account
 #### Endpoint
-`PATCH /users/{id}/`
+`POST /api/v1/users/{id}/lock/`
 
-#### Authentication Requirement
-`IsAuthenticated` + `IsAdmin`
+#### Authentication & Authorization
+- **Authentication**: JWT Required (`Bearer <Token>`)
+- **Permissions**: `IsAuthenticated` and `IsAdmin`
 
 #### Description
-Partially updates a user account. You only need to include the fields you want to change.
+Manually locks a specific user account. This creates a permanent/long-term active lock preventing the user from logging in. Logs a `USER_LOCKED` administrative event.
 
----
-
-### 20. Delete User
-#### Endpoint
-`DELETE /users/{id}/`
-
-#### Authentication Requirement
-`IsAuthenticated` + `IsAdmin`
-
-#### Description
-Permanently deletes the user account from the system. This triggers a cascade delete across session, lock, and role tables, and logs the deletion under a `USER_DISABLED` activity action.
+#### Request Headers
+- `Authorization: Bearer <JWT_ACCESS_TOKEN>`
 
 #### Success Response
 * **Status**: `200 OK`
-* **Payload**:
+* **Response Body**:
 ```json
 {
-  "success": true,
-  "message": "User account deleted successfully.",
-  "data": null
+    "success": true,
+    "message": "User account locked successfully.",
+    "data": null
 }
 ```
+
+#### Error Responses
+* **400 Bad Request (Already Locked)**:
+  ```json
+  {
+      "success": false,
+      "message": "User account is already locked.",
+      "errors": null
+  }
+  ```
 
 ---
 
 ### 21. Unlock User Account
 #### Endpoint
-`POST /users/{id}/unlock/`
+`POST /api/v1/users/{id}/unlock/`
 
-#### Authentication Requirement
-`IsAuthenticated` + `IsAdmin`
+#### Authentication & Authorization
+- **Authentication**: JWT Required (`Bearer <Token>`)
+- **Permissions**: `IsAuthenticated` and `IsAdmin`
 
 #### Description
-Manually unlocks an account that was locked due to brute-force protection. It deactivates the user's active `AccountLock` record, clears their failed login attempts, and logs the action.
+Manually unlocks a specific locked user account. This marks all active locks as inactive and resets the failed login attempt counter. Logs both `USER_UNLOCKED` (administrative ledger) and `ACCOUNT_UNLOCKED` (security log) events.
+
+#### Request Headers
+- `Authorization: Bearer <JWT_ACCESS_TOKEN>`
 
 #### Success Response
 * **Status**: `200 OK`
-* **Payload**:
+* **Response Body**:
 ```json
 {
-  "success": true,
-  "message": "User account unlocked successfully.",
-  "data": null
+    "success": true,
+    "message": "User account unlocked successfully.",
+    "data": null
 }
 ```
 
-#### Error Response
-* **Status**: `400 Bad Request` (If the user account is not currently locked)
+#### Error Responses
+* **400 Bad Request (Not Locked)**:
+  ```json
+  {
+      "success": false,
+      "message": "User account is not locked.",
+      "errors": null
+  }
+  ```
+
+---
+
+### 22. Delete User
+#### Endpoint
+`DELETE /api/v1/users/{id}/`
+
+#### Authentication & Authorization
+- **Authentication**: JWT Required (`Bearer <Token>`)
+- **Permissions**: `IsAuthenticated` and `IsAdmin`
+
+#### Description
+Permanently deletes the user account from the system. This triggers a cascade delete across intermediate tables, locks, and sessions. Enforces checks preventing self-deletion and superuser deletion. Logs a `USER_DELETED` administrative event.
+
+#### Request Headers
+- `Authorization: Bearer <JWT_ACCESS_TOKEN>`
+
+#### Success Response
+* **Status**: `200 OK`
+* **Response Body**:
 ```json
 {
-  "success": false,
-  "message": "User is not locked.",
-  "errors": null
+    "success": true,
+    "message": "User deleted successfully.",
+    "data": null
 }
 ```
+
+#### Error Responses
+* **400 Bad Request (Self-Deletion or Superuser Block)**:
+  ```json
+  {
+      "success": false,
+      "message": "Administrators cannot delete their own account.",
+      "errors": null
+  }
+  ```
 
 ---
 
@@ -997,7 +1213,7 @@ Manually unlocks an account that was locked due to brute-force protection. It de
 
 ---
 
-### 22. List Security Logs
+### 23. List Security Logs
 #### Endpoint
 `GET /security-logs/`
 

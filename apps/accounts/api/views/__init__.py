@@ -11,7 +11,7 @@ from .auth import (
 )
 from .profile import ProfileView
 from .sessions import UserSessionViewSet
-from .users import UserAdminViewSet
+from .user_views import UserAdminViewSet
 from .activity_logs import SecurityLogListView
 
 __all__ = [

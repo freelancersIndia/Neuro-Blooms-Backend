@@ -10,6 +10,9 @@ class ActivityType:
     # Administrative Events
     USER_CREATED = 'USER_CREATED'
     USER_UPDATED = 'USER_UPDATED'
+    USER_LOCKED = 'USER_LOCKED'
+    USER_UNLOCKED = 'USER_UNLOCKED'
+    USER_DELETED = 'USER_DELETED'
     ROLE_ASSIGNED = 'ROLE_ASSIGNED'
     ROLE_REMOVED = 'ROLE_REMOVED'
     USER_DISABLED = 'USER_DISABLED'
@@ -34,6 +37,9 @@ class ActivityType:
         (OTP_VERIFIED, 'OTP Verified'),
         (USER_CREATED, 'User Created'),
         (USER_UPDATED, 'User Updated'),
+        (USER_LOCKED, 'User Locked'),
+        (USER_UNLOCKED, 'User Unlocked'),
+        (USER_DELETED, 'User Deleted'),
         (ROLE_ASSIGNED, 'Role Assigned'),
         (ROLE_REMOVED, 'Role Removed'),
         (USER_DISABLED, 'User Disabled'),
