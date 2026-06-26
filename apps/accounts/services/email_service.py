@@ -83,3 +83,33 @@ class EmailService:
             html_message=html_message,
         )
 
+    @staticmethod
+    def send_appointment_request_confirmation(email: str, parent_name: str, request_number: str) -> None:
+        context = {
+            'parent_name': parent_name,
+            'request_number': request_number,
+        }
+        html_message = render_to_string('emails/appointment_request_confirmation.html', context)
+        EmailService._send_email_safe(
+            subject='We have received your appointment request - Neuro Blooms',
+            message=f'Dear {parent_name}, we have received your appointment request. Your request number is {request_number}.',
+            recipient_list=[email],
+            html_message=html_message,
+        )
+
+    @staticmethod
+    def send_appointment_request_approved(email: str, parent_name: str, request_number: str) -> None:
+        context = {
+            'parent_name': parent_name,
+            'request_number': request_number,
+        }
+        html_message = render_to_string('emails/appointment_request_approved.html', context)
+        EmailService._send_email_safe(
+            subject='Your Appointment Request is Approved! - Neuro Blooms',
+            message=f'Dear {parent_name}, your appointment request has been approved. Your request number is {request_number}.',
+            recipient_list=[email],
+            html_message=html_message,
+        )
+
+
+

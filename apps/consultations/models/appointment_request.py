@@ -25,11 +25,12 @@ class AppointmentRequest(BaseModel):
     child_last_name = models.CharField(max_length=150, verbose_name="Child Last Name")
     date_of_birth = models.DateField(verbose_name="Child Date of Birth")
     gender = models.CharField(max_length=20, choices=Gender.choices, verbose_name="Gender")
-    appointment_type = models.CharField(max_length=20, choices=AppointmentType.choices, verbose_name="Appointment Type")
+    appointment_type = models.CharField(max_length=50, choices=AppointmentType.choices, verbose_name="Appointment Type")
     primary_concern = models.TextField(verbose_name="Primary Concern")
     preferred_date = models.DateField(verbose_name="Preferred Date")
     preferred_time_slot = models.CharField(max_length=50, verbose_name="Preferred Time Slot")
     additional_notes = models.TextField(blank=True, null=True, verbose_name="Additional Notes")
+    referral_source = models.CharField(max_length=255, blank=True, null=True, verbose_name="Referral Source")
     booking_source = models.CharField(
         max_length=20,
         choices=BookingSource.choices,

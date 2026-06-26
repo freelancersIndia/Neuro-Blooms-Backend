@@ -149,6 +149,9 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ),
     'EXCEPTION_HANDLER': 'apps.accounts.utils.exceptions.custom_exception_handler',
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/day',
+    }
 }
 
 SIMPLE_JWT = {

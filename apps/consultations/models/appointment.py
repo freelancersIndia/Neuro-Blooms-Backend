@@ -22,7 +22,7 @@ class Appointment(BaseModel):
         verbose_name="Appointment Request"
     )
     appointment_type = models.CharField(
-        max_length=20,
+        max_length=50,
         choices=AppointmentType.choices,
         verbose_name="Appointment Type"
     )
