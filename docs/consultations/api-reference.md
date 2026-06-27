@@ -20,9 +20,15 @@
     - [Reject Appointment Request (`POST /api/v1/appointments/requests/{id}/reject/`)](#reject-appointment-request)
     - [Retrieve Appointment Request Timeline (`GET /api/v1/appointments/requests/{id}/timeline/`)](#retrieve-appointment-request-timeline)
     - [Export Appointment Requests to CSV (`GET /api/v1/appointments/requests/export/`)](#export-appointment-requests-to-csv)
-5. [Data Normalization & Sanitization Rules](#5-data-normalization--sanitization-rules)
-6. [Duplicate Prevention & Validation Logic](#6-duplicate-prevention--validation-logic)
-7. [Best Practices, Throttling & Security Guidelines](#7-best-practices-throttling--security-guidelines)
+5. [Patient Matching & Patient Creation API Specification](#5-patient-matching--patient-creation-api-specification)
+    - [Load Patient Matching Screen (`GET /api/v1/patient-matching/{appointment_request_id}/`)](#load-patient-matching-screen)
+    - [Manual Patient Search (`GET /api/v1/patients/search/`)](#manual-patient-search)
+    - [Link Existing Patient (`POST /api/v1/patient-matching/{appointment_request_id}/link/`)](#link-existing-patient)
+    - [Create New Patient (`POST /api/v1/patient-matching/{appointment_request_id}/create-patient/`)](#create-new-patient)
+    - [Retrieve Patient Preview (`GET /api/v1/patients/{patient_id}/preview/`)](#retrieve-patient-preview)
+6. [Data Normalization & Sanitization Rules](#6-data-normalization--sanitization-rules)
+7. [Duplicate Prevention & Validation Logic](#7-duplicate-prevention--validation-logic)
+8. [Best Practices, Throttling & Security Guidelines](#8-best-practices-throttling--security-guidelines)
 
 ---
 
@@ -32,6 +38,7 @@ The Neuro Blooms Consultations Module API provides endpoints for scheduling, boo
 This module exposes:
 1. A public-facing API for receiving appointment/consultation requests from the public website (recorded in the system as **Appointment Requests** in `PENDING` state).
 2. Authenticated management APIs for receptionist and administrator workflows to review, list, aggregate statistics for, approve, reject, view timelines for, and export appointment requests.
+3. Authenticated duplicate detection, manual patient search, patient linking, patient creation, and profile preview API capabilities.
 
 Doctor and calendar scheduling/booking management API capabilities are not included in the scope of this module.
 
@@ -211,7 +218,7 @@ Retrieve a paginated, filtered, and sorted list of all appointment requests subm
 | `page` | Integer | No | Page number for pagination. Defaults to `1`. |
 | `page_size` | Integer | No | Number of requests per page (min 1, max 100). Defaults to `10`. |
 | `search` | String | No | Case-insensitive search on parent name, child name, mobile, email, and request number. |
-| `status` | String | No | Filter by request status (`PENDING`, `APPROVED`, `REJECTED`). |
+| `status` | String | No | Filter by request status (`PENDING`, `APPROVED`, `REJECTED`, `PATIENT_LINKED`, `PATIENT_CREATED`). |
 | `appointment_type`| String | No | Filter by appointment type (`INITIAL_CONSULTATION`, `DEVELOPMENT_ASSESSMENT`). |
 | `preferred_date` | Date | No | Filter by preferred date (`YYYY-MM-DD`). |
 | `primary_concern` | String | No | Filter by primary concern concern key. |
@@ -442,7 +449,224 @@ Content-Disposition: attachment; filename="appointment_requests.csv"
 
 ---
 
-## 5. Data Normalization & Sanitization Rules
+## 5. Patient Matching & Patient Creation API Specification
+
+### Load Patient Matching Screen
+
+Perform automatic duplicate detection on an approved request and retrieve best-match statistics.
+
+* **Endpoint:** `/patient-matching/{appointment_request_id}/`
+* **Method:** `GET`
+* **Authentication:** Required (JWT Bearer)
+* **Permissions:** Admin, Receptionist
+
+#### Response 200 OK Example
+```json
+{
+  "success": true,
+  "message": "Patient matching screen data loaded successfully.",
+  "data": {
+    "appointment_request": {
+      "id": "764b8bbd-d34e-4e4f-b67a-115f0ebcd22f",
+      "request_number": "REQ-2026-000001",
+      "parent_first_name": "Rohan",
+      "parent_last_name": "Sharma",
+      "relationship_to_child": "FATHER",
+      "mobile_number": "9876543210",
+      "alternate_mobile_number": "",
+      "email": "rohan@example.com",
+      "child_first_name": "Aarav",
+      "child_last_name": "Sharma",
+      "date_of_birth": "2020-05-15",
+      "gender": "MALE",
+      "appointment_type": "INITIAL_CONSULTATION",
+      "primary_concern": "SPEECH_DELAY",
+      "preferred_date": "2026-07-06",
+      "preferred_time_slot": "10:00 AM",
+      "additional_notes": "",
+      "referral_source": "Google",
+      "booking_source": "WEBSITE",
+      "status": "APPROVED",
+      "created_at": "2026-06-26T14:00:00Z"
+    },
+    "best_match_score": 100.0,
+    "matching_patients": [
+      {
+        "patient": {
+          "id": "2bc99dd8-b34e-4e4f-b67a-115f0ebcd33e",
+          "patient_number": "NBP-000001",
+          "child_first_name": "Aarav",
+          "child_last_name": "Sharma",
+          "parent_first_name": "Rohan",
+          "parent_last_name": "Sharma",
+          "mobile_number": "9876543210",
+          "email": "rohan@example.com",
+          "patient_status": "ACTIVE",
+          "created_at": "2026-05-10T12:00:00Z"
+        },
+        "score": 100.0,
+        "confidence_level": "Very High Match"
+      }
+    ],
+    "matching_statistics": {
+      "total_candidates": 1,
+      "very_high_matches": 1,
+      "high_matches": 0,
+      "possible_matches": 0,
+      "low_confidence_matches": 0
+    }
+  }
+}
+```
+
+---
+
+### Manual Patient Search
+
+Perform a case-insensitive manual search across all registered patients.
+
+* **Endpoint:** `/patients/search/`
+* **Method:** `GET`
+* **Authentication:** Required (JWT Bearer)
+* **Permissions:** Admin, Receptionist, Doctor
+
+#### Query Parameters
+| Parameter | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `search` | String | No | Search string (whitespace tolerant). |
+| `search_type` | String | No (Yes if search provided) | Allowed values: `PATIENT_ID`, `PARENT_NAME`, `CHILD_NAME`, `PHONE`, `EMAIL`. |
+| `page` | Integer | No | Page number. Defaults to `1`. |
+| `page_size` | Integer | No | Max 100. Defaults to `10`. |
+| `ordering` | String | No | Sorting criteria. Allowed values: `patient_name`, `-patient_name`, `created_date`, `-created_date`, `last_visit`, `-last_visit`, `patient_id`, `-patient_id`. Defaults to `-created_date`. |
+
+#### Response 200 OK Example
+```json
+{
+  "success": true,
+  "message": "Patients fetched successfully.",
+  "data": {
+    "results": [
+      {
+        "id": "2bc99dd8-b34e-4e4f-b67a-115f0ebcd33e",
+        "patient_number": "NBP-000001",
+        "child_first_name": "Aarav",
+        "child_last_name": "Sharma",
+        "parent_first_name": "Rohan",
+        "parent_last_name": "Sharma",
+        "mobile_number": "9876543210",
+        "email": "rohan@example.com",
+        "patient_status": "ACTIVE",
+        "created_at": "2026-05-10T12:00:00Z"
+      }
+    ],
+    "pagination": {
+      "count": 1,
+      "page": 1,
+      "page_size": 10,
+      "total_pages": 1,
+      "next": null,
+      "previous": null
+    }
+  }
+}
+```
+
+---
+
+### Link Existing Patient
+
+Links an approved request to an active patient record.
+
+* **Endpoint:** `/patient-matching/{appointment_request_id}/link/`
+* **Method:** `POST`
+* **Authentication:** Required (JWT Bearer)
+* **Permissions:** Admin, Receptionist
+
+#### Request Payload
+```json
+{
+  "patient_id": "NBP-000001"
+}
+```
+
+#### Response 200 OK
+```json
+{
+  "success": true,
+  "message": "Patient linked successfully."
+}
+```
+
+---
+
+### Create New Patient
+
+Creates a new patient profile using details imported from the approved request.
+
+* **Endpoint:** `/patient-matching/{appointment_request_id}/create-patient/`
+* **Method:** `POST`
+* **Authentication:** Required (JWT Bearer)
+* **Permissions:** Admin, Receptionist
+* **Request Body:** None
+
+#### Response 201 Created
+```json
+{
+  "success": true,
+  "message": "Patient created successfully.",
+  "data": {
+    "patient_id": "NBP-000002"
+  }
+}
+```
+
+---
+
+### Retrieve Patient Preview
+
+Get lightweight preview data for the profile preview modal.
+
+* **Endpoint:** `/patients/{patient_id}/preview/`
+* **Method:** `GET`
+* **Authentication:** Required (JWT Bearer)
+* **Permissions:** Admin, Receptionist, Doctor
+* **URL parameter `patient_id`:** Can be a patient's UUID or sequential patient number (e.g. `NBP-000001`).
+
+#### Response 200 OK Example
+```json
+{
+  "success": true,
+  "message": "Patient preview loaded successfully.",
+  "data": {
+    "patient_id": "NBP-000001",
+    "photo": null,
+    "parent": {
+      "first_name": "Rohan",
+      "last_name": "Sharma",
+      "relationship": "FATHER"
+    },
+    "child": {
+      "first_name": "Aarav",
+      "last_name": "Sharma"
+    },
+    "phone": "9876543210",
+    "email": "rohan@example.com",
+    "gender": "MALE",
+    "age": 6,
+    "dob": "2020-05-15",
+    "last_visit": "2026-06-20",
+    "appointments_count": 1,
+    "consultations_count": 1,
+    "followups_count": 0,
+    "created_date": "2026-05-10T12:00:00Z",
+    "patient_status": "ACTIVE"
+  }
+}
+```
+
+---
+
+## 6. Data Normalization & Sanitization Rules
 
 The backend automatically applies cleanup rules on incoming payloads during deserialization to protect database integrity and ensure API flexibility:
 
@@ -457,7 +681,7 @@ The backend automatically applies cleanup rules on incoming payloads during dese
 
 ---
 
-## 6. Duplicate Prevention & Validation Logic
+## 7. Duplicate Prevention & Validation Logic
 
 ### Duplicate Request Prevention
 Before registering the request, the service layer queries existing requests matching:
@@ -474,11 +698,13 @@ If `primary_concern` is normalized to `OTHER` (`"Other"`), the `additional_notes
 
 ---
 
-## 7. Best Practices, Throttling & Security Guidelines
+## 8. Best Practices, Throttling & Security Guidelines
 
 1. **IP-Based Throttling**: Anonymous endpoints are restricted to `100 requests per day` per IP address to safeguard against Denial of Service (DoS) and programmatic form spam.
 2. **PII Masking in Logs**: The backend is configured to comply with strict data privacy guidelines. System logging does not write raw email addresses or mobile numbers to disk. Sensitive details are masked using:
    - Email: `s*****h@example.com`
    - Mobile: `******3210`
-3. **Transactional Integrity**: Sequential ID generation and request persistence are executed inside `transaction.atomic` blocks with `select_for_update` row locks on previous sequential keys to prevent ID collisions.
+3. **Transactional Integrity**: Sequential ID generation and request/patient persistence are executed inside `transaction.atomic` blocks with `select_for_update` row locks on previous sequential keys to prevent ID collisions and race conditions.
 4. **Resilient Integrations**: The system triggers confirmation emails asynchronously (or safely within try-except blocks). Network or SMTP transmission issues do not fail the request creation API.
+5. **UUID Integrity**: Standardized UUID path inputs are verified before database reads. Malformed input formats generate immediate structured 400 validation error responses rather than server crashes or 404 HTML traces.
+

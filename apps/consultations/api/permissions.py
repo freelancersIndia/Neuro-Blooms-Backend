@@ -11,3 +11,14 @@ class IsAdminOrReceptionist(permissions.BasePermission):
             request.user.is_authenticated and
             request.user.has_any_role(['ADMIN', 'RECEPTIONIST'])
         )
+
+class IsAdminOrReceptionistOrDoctor(permissions.BasePermission):
+    """
+    Allows access to authenticated users with ADMIN, RECEPTIONIST, or DOCTOR roles.
+    """
+    def has_permission(self, request, view) -> bool:
+        return (
+            request.user and
+            request.user.is_authenticated and
+            request.user.has_any_role(['ADMIN', 'RECEPTIONIST', 'DOCTOR'])
+        )

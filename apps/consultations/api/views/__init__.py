@@ -8,6 +8,14 @@ from .appointment_management import (
     AppointmentRequestTimelineAPIView,
     AppointmentRequestExportAPIView,
 )
+from .patient_matching import (
+    PatientMatchingAPIView,
+    PatientSearchAPIView,
+    PatientLinkAPIView,
+    PatientCreateAPIView,
+    PatientPreviewAPIView,
+)
+from .patients_v2 import PatientViewSet
 
 __all__ = [
     'PublicConsultationRequestAPIView',
@@ -18,5 +26,11 @@ __all__ = [
     'AppointmentRequestRejectAPIView',
     'AppointmentRequestTimelineAPIView',
     'AppointmentRequestExportAPIView',
+    'PatientMatchingAPIView',
+    'PatientSearchAPIView',
+    'PatientLinkAPIView',
+    'PatientCreateAPIView',
+    'PatientPreviewAPIView',
+    'PatientViewSet',
 ]
 

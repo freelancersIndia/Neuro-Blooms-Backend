@@ -1,6 +1,18 @@
 from django.db import models
+from django.conf import settings
 from apps.consultations.models.base import BaseModel
 from apps.consultations.choices import Gender, RelationshipToChild, PatientStatus
+
+class PatientQuerySet(models.QuerySet):
+    def active_records(self):
+        return self.filter(is_deleted=False)
+
+class PatientManager(models.Manager):
+    def get_queryset(self):
+        return PatientQuerySet(self.model, using=self._db).active_records()
+
+    def all_with_deleted(self):
+        return PatientQuerySet(self.model, using=self._db)
 
 class Patient(BaseModel):
     patient_number = models.CharField(max_length=50, unique=True, verbose_name="Patient Number")
@@ -25,6 +37,45 @@ class Patient(BaseModel):
         default=PatientStatus.ACTIVE,
         verbose_name="Patient Status"
     )
+    
+    # New Fields for Phase 4
+    assigned_doctor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_patients",
+        verbose_name="Assigned Doctor"
+    )
+    emergency_contact_name = models.CharField(max_length=150, blank=True, null=True, verbose_name="Emergency Contact Name")
+    emergency_contact_phone = models.CharField(max_length=20, blank=True, null=True, verbose_name="Emergency Contact Phone")
+    preferred_language = models.CharField(max_length=50, blank=True, null=True, verbose_name="Preferred Language")
+    referral_source = models.CharField(max_length=255, blank=True, null=True, verbose_name="Referral Source")
+    primary_diagnosis = models.TextField(blank=True, null=True, verbose_name="Primary Diagnosis")
+    notes = models.TextField(blank=True, null=True, verbose_name="Medical Notes")
+    photo = models.ImageField(upload_to="patients/", blank=True, null=True, verbose_name="Photo")
+    
+    # Soft Delete & Audit Fields
+    is_deleted = models.BooleanField(default=False, verbose_name="Is Deleted")
+    deleted_at = models.DateTimeField(null=True, blank=True, verbose_name="Deleted At")
+    deleted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="deleted_patients",
+        verbose_name="Deleted By"
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_patients",
+        verbose_name="Created By"
+    )
+
+    objects = PatientManager()
 
     class Meta:
         db_table = "consultations_patients"
@@ -36,6 +87,8 @@ class Patient(BaseModel):
             models.Index(fields=["child_first_name"], name="idx_patient_first_name"),
             models.Index(fields=["child_last_name"], name="idx_patient_last_name"),
             models.Index(fields=["date_of_birth"], name="idx_patient_dob"),
+            models.Index(fields=["is_deleted"], name="idx_patient_is_deleted"),
+            models.Index(fields=["assigned_doctor"], name="idx_patient_doctor"),
         ]
 
     def __str__(self):

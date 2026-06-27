@@ -53,6 +53,41 @@ class AppointmentRequest(BaseModel):
         verbose_name="Reviewed By"
     )
     reviewed_at = models.DateTimeField(blank=True, null=True, verbose_name="Reviewed At")
+    
+    patient = models.ForeignKey(
+        'Patient',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='appointment_requests',
+        verbose_name="Linked/Created Patient"
+    )
+    patient_linked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='linked_requests',
+        verbose_name="Patient Linked By"
+    )
+    patient_linked_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Patient Linked At"
+    )
+    patient_created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_patient_requests',
+        verbose_name="Patient Created By"
+    )
+    patient_created_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Patient Created At"
+    )
 
     class Meta:
         db_table = "consultations_appointment_requests"
@@ -63,6 +98,7 @@ class AppointmentRequest(BaseModel):
             models.Index(fields=["status"], name="idx_apptreq_status"),
             models.Index(fields=["mobile_number"], name="idx_apptreq_mobile"),
             models.Index(fields=["preferred_date"], name="idx_apptreq_pref_date"),
+            models.Index(fields=["patient"], name="idx_apptreq_patient"),
         ]
 
     def __str__(self):
