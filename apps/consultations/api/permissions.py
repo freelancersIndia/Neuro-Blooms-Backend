@@ -1,24 +1,21 @@
 from rest_framework import permissions
 
-class IsAdminOrReceptionist(permissions.BasePermission):
+class IsAdminOrReceptionistReadOnly(permissions.BasePermission):
     """
-    Allows access only to authenticated users with ADMIN or RECEPTIONIST roles.
-    DOCTOR role or other roles will be forbidden.
+    Allows full access (create, update, delete) to users with the ADMIN role,
+    and Read-Only access (GET, HEAD, OPTIONS) to users with the RECEPTIONIST role.
+    Doctors and anonymous users are denied access.
     """
     def has_permission(self, request, view) -> bool:
-        return (
-            request.user and
-            request.user.is_authenticated and
-            request.user.has_any_role(['ADMIN', 'RECEPTIONIST'])
-        )
+        if not (request.user and request.user.is_authenticated):
+            return False
 
-class IsAdminOrReceptionistOrDoctor(permissions.BasePermission):
-    """
-    Allows access to authenticated users with ADMIN, RECEPTIONIST, or DOCTOR roles.
-    """
-    def has_permission(self, request, view) -> bool:
-        return (
-            request.user and
-            request.user.is_authenticated and
-            request.user.has_any_role(['ADMIN', 'RECEPTIONIST', 'DOCTOR'])
-        )
+        # Admin gets full access (covers Super Admin as they automatically get ADMIN role in User manager)
+        if request.user.has_role('ADMIN') or request.user.is_superuser:
+            return True
+
+        # Receptionist gets Read-Only access
+        if request.user.has_role('RECEPTIONIST'):
+            return request.method in permissions.SAFE_METHODS
+
+        return False

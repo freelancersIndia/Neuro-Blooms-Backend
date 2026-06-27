@@ -9,6 +9,14 @@ from .doctor_availability import DoctorAvailability
 from .appointment_status_history import AppointmentStatusHistory
 from .appointment_note import AppointmentNote
 from .appointment_attachment import AppointmentAttachment
+from .clinic_holiday import ClinicHoliday
+from .doctor_leave import DoctorLeave
+from .clinic_settings import ClinicSettings
+from .clinic_weekly_schedule import ClinicWeeklySchedule
+from .clinic_break import ClinicBreak
+from .doctor_working_day import DoctorWorkingDay
+from .doctor_blocked_slot import DoctorBlockedSlot
+from .appointment_timeline import AppointmentTimeline
 
 __all__ = [
     'BaseModel',
@@ -22,4 +30,12 @@ __all__ = [
     'AppointmentStatusHistory',
     'AppointmentNote',
     'AppointmentAttachment',
+    'ClinicHoliday',
+    'DoctorLeave',
+    'ClinicSettings',
+    'ClinicWeeklySchedule',
+    'ClinicBreak',
+    'DoctorWorkingDay',
+    'DoctorBlockedSlot',
+    'AppointmentTimeline',
 ]

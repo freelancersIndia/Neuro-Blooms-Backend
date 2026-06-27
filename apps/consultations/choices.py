@@ -41,26 +41,42 @@ class AppointmentType(models.TextChoices):
     DEVELOPMENT_ASSESSMENT = 'DEVELOPMENT_ASSESSMENT', 'Development Assessment'
 
 class AppointmentStatus(models.TextChoices):
+    PENDING = 'PENDING', 'Pending'
     CONFIRMED = 'CONFIRMED', 'Confirmed'
+    CHECKED_IN = 'CHECKED_IN', 'Checked In'
     IN_CONSULTATION = 'IN_CONSULTATION', 'In Consultation'
     COMPLETED = 'COMPLETED', 'Completed'
-    RESCHEDULED = 'RESCHEDULED', 'Rescheduled'
     CANCELLED = 'CANCELLED', 'Cancelled'
     NO_SHOW = 'NO_SHOW', 'No Show'
+    RESCHEDULED = 'RESCHEDULED', 'Rescheduled'
 
 class SlotStatus(models.TextChoices):
     AVAILABLE = 'AVAILABLE', 'Available'
     BOOKED = 'BOOKED', 'Booked'
     BLOCKED = 'BLOCKED', 'Blocked'
 
-class Weekday(models.IntegerChoices):
-    MONDAY = 0, 'Monday'
-    TUESDAY = 1, 'Tuesday'
-    WEDNESDAY = 2, 'Wednesday'
-    THURSDAY = 3, 'Thursday'
-    FRIDAY = 4, 'Friday'
-    SATURDAY = 5, 'Saturday'
-    SUNDAY = 6, 'Sunday'
+class Weekday(models.TextChoices):
+    MONDAY = 'MONDAY', 'Monday'
+    TUESDAY = 'TUESDAY', 'Tuesday'
+    WEDNESDAY = 'WEDNESDAY', 'Wednesday'
+    THURSDAY = 'THURSDAY', 'Thursday'
+    FRIDAY = 'FRIDAY', 'Friday'
+    SATURDAY = 'SATURDAY', 'Saturday'
+    SUNDAY = 'SUNDAY', 'Sunday'
+
+class Priority(models.TextChoices):
+    LOW = 'LOW', 'Low'
+    MEDIUM = 'MEDIUM', 'Medium'
+    HIGH = 'HIGH', 'High'
+    URGENT = 'URGENT', 'Urgent'
+
+class ReferralSource(models.TextChoices):
+    DIRECT = 'DIRECT', 'Direct'
+    DOCTOR_REFERRAL = 'DOCTOR_REFERRAL', 'Doctor Referral'
+    SCHOOL_REFERRAL = 'SCHOOL_REFERRAL', 'School Referral'
+    WEBSITE = 'WEBSITE', 'Website'
+    SOCIAL_MEDIA = 'SOCIAL_MEDIA', 'Social Media'
+    OTHER = 'OTHER', 'Other'
 
 class NoteVisibility(models.TextChoices):
     PRIVATE = 'PRIVATE', 'Private'

@@ -55,6 +55,25 @@ class Patient(BaseModel):
     notes = models.TextField(blank=True, null=True, verbose_name="Medical Notes")
     photo = models.ImageField(upload_to="patients/", blank=True, null=True, verbose_name="Photo")
     
+    # Child Information fields
+    blood_group = models.CharField(max_length=10, blank=True, null=True, verbose_name="Blood Group")
+    allergies = models.TextField(blank=True, null=True, verbose_name="Allergies")
+    medical_alerts = models.TextField(blank=True, null=True, verbose_name="Medical Alerts")
+
+    # Overview Tab fields
+    current_focus = models.TextField(blank=True, null=True, verbose_name="Current Focus")
+    therapy_started = models.DateField(blank=True, null=True, verbose_name="Therapy Started")
+    treatment_summary = models.TextField(blank=True, null=True, verbose_name="Treatment Summary")
+    current_progress = models.TextField(blank=True, null=True, verbose_name="Current Progress")
+    latest_recommendation = models.TextField(blank=True, null=True, verbose_name="Latest Recommendation")
+    current_treatment_plan = models.TextField(blank=True, null=True, verbose_name="Current Treatment Plan")
+    
+    # Internal Notes field for API 10
+    internal_notes = models.TextField(blank=True, null=True, verbose_name="Internal Notes")
+    
+    # Session counts for API 13
+    recommended_sessions = models.IntegerField(default=10, null=True, blank=True, verbose_name="Recommended Sessions")
+    
     # Soft Delete & Audit Fields
     is_deleted = models.BooleanField(default=False, verbose_name="Is Deleted")
     deleted_at = models.DateTimeField(null=True, blank=True, verbose_name="Deleted At")
