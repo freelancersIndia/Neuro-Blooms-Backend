@@ -49,6 +49,22 @@ class Appointment(BaseModel):
         related_name="child_appointments",
         verbose_name="Parent Appointment"
     )
+    treatment_case = models.ForeignKey(
+        'TreatmentCase',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="appointments",
+        verbose_name="Treatment Case"
+    )
+    previous_consultation = models.ForeignKey(
+        'Consultation',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="next_appointments",
+        verbose_name="Previous Consultation"
+    )
     booking_source = models.CharField(
         max_length=20,
         choices=BookingSource.choices,

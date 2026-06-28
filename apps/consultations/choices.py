@@ -19,6 +19,7 @@ class AppointmentRequestStatus(models.TextChoices):
     REJECTED = 'REJECTED', 'Rejected'
     PATIENT_LINKED = 'PATIENT_LINKED', 'Patient Linked'
     PATIENT_CREATED = 'PATIENT_CREATED', 'Patient Created'
+    RESCHEDULED = 'RESCHEDULED', 'Rescheduled'
 
 class BookingSource(models.TextChoices):
     WEBSITE = 'WEBSITE', 'Website'

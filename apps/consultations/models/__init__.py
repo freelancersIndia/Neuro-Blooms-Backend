@@ -17,6 +17,11 @@ from .clinic_break import ClinicBreak
 from .doctor_working_day import DoctorWorkingDay
 from .doctor_blocked_slot import DoctorBlockedSlot
 from .appointment_timeline import AppointmentTimeline
+from .patient_timeline import PatientTimeline
+from .consultation_attachment import ConsultationAttachment
+from .consultation_activity_log import ConsultationActivityLog
+from .consultation_audit_log import ConsultationAuditLog
+from .treatment_case import TreatmentCase
 
 __all__ = [
     'BaseModel',
@@ -38,4 +43,9 @@ __all__ = [
     'DoctorWorkingDay',
     'DoctorBlockedSlot',
     'AppointmentTimeline',
+    'PatientTimeline',
+    'ConsultationAttachment',
+    'ConsultationActivityLog',
+    'ConsultationAuditLog',
+    'TreatmentCase',
 ]
