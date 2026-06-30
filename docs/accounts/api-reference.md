@@ -1265,14 +1265,655 @@ Retrieves the security audit ledger. Enforces pagination and supports filters.
 
 ---
 
-## 10. Role Persistence and System Roles Catalog
+## 10. Role and Permission Management API Endpoint Specifications (Admin Only)
 
-The system does **not** expose a dedicated `/roles/` CRUD endpoint. Roles are static and seeded during system deployment. They are managed through the User Management APIs.
+*Note: Access to these endpoints requires a valid access token belonging to a user with the `ADMIN` role. Non-admin access returns a `403 Forbidden` response.*
 
-### Available System Roles
-1. **`ADMIN`**: Full administrative privileges. Can manage users, view security logs, unlock accounts, and modify system settings.
-2. **`DOCTOR`**: Clinical access. Can view patient files, manage appointments, and write clinical notes.
-3. **`RECEPTIONIST`**: Scheduling access. Can manage patient registrations and schedule appointments.
+---
+
+### 24. List Roles
+#### Endpoint
+`GET /api/v1/roles/`
+
+#### Authentication & Authorization
+- **Authentication**: JWT Required (`Bearer <Token>`)
+- **Permissions**: `IsAuthenticated` and `IsAdmin`
+
+#### Description
+Lists all registered roles with pagination, search, and filters. Returns annotated user and permission counts.
+
+#### Query Parameters
+* **page**: Page number (default: `1`).
+* **page_size**: Number of records per page (default: `10`, max: `100`). Supporting values like `10`, `20`, `50`, `100`.
+* **search**: Case-insensitive search query matching `name` or `description`.
+* **status**: Filter by status (`active` or `inactive`).
+* **type**: Filter by role type (`system` or `custom`).
+* **has_users**: Filter by whether the role has assigned users (`true` or `false`).
+* **created_after**: Filter roles created on or after this ISO date.
+* **created_before**: Filter roles created on or before this ISO date.
+* **date_range**: Shortcut filter (`today`, `7_days`, `30_days`).
+* **ordering**: Order by `name`, `-name`, `created_at`, `-created_at`, `users_count`, `-users_count`, `permissions_count`, `-permissions_count`.
+
+#### Success Response
+* **Status**: `200 OK`
+* **Payload**:
+```json
+{
+  "success": true,
+  "message": "Roles retrieved successfully.",
+  "data": {
+    "count": 4,
+    "page": 1,
+    "page_size": 10,
+    "total_pages": 1,
+    "next": null,
+    "previous": null,
+    "results": [
+      {
+        "id": "e402fdbe-389d-4001-a189-e2b202c4819d",
+        "name": "DOCTOR",
+        "description": "Clinical role for doctors.",
+        "users_count": 15,
+        "permissions_count": 5,
+        "is_system": true,
+        "is_active": true,
+        "created_at": "2026-06-20T10:00:00Z",
+        "updated_at": "2026-06-23T14:30:00Z",
+        "can_delete": false,
+        "can_edit": true
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 25. Role Statistics
+#### Endpoint
+`GET /api/v1/roles/statistics/`
+
+#### Description
+Returns a summary of role metrics for the dashboard.
+
+#### Success Response
+* **Status**: `200 OK`
+* **Payload**:
+```json
+{
+  "success": true,
+  "message": "Role statistics retrieved successfully.",
+  "data": {
+    "total_roles": 4,
+    "active_roles": 4,
+    "inactive_roles": 0,
+    "system_roles": 3,
+    "custom_roles": 1,
+    "total_assigned_users": 16
+  }
+}
+```
+
+---
+
+### 26. Create Role
+#### Endpoint
+`POST /api/v1/roles/`
+
+#### Request Payload
+```json
+{
+  "name": "Ward Manager",
+  "description": "Manages ward operations and nurse scheduling.",
+  "is_active": true,
+  "permissions": [
+    "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+  ]
+}
+```
+
+#### Validation Rules
+1. **name**: Required. Between 3 and 50 characters. Case-insensitive uniqueness.
+2. **description**: Optional. Maximum 500 characters.
+3. **permissions**: Required. Must be a non-empty list of valid Permission UUIDs.
+4. **is_active**: Optional. Defaults to `true`.
+
+#### Success Response
+* **Status**: `201 Created`
+* **Payload**:
+```json
+{
+  "success": true,
+  "message": "Role created successfully.",
+  "data": {
+    "id": "c782fdbe-389d-4001-a189-e2b202c4819d",
+    "name": "Ward Manager",
+    "description": "Manages ward operations and nurse scheduling.",
+    "is_system": false,
+    "is_active": true,
+    "created_at": "2026-06-29T23:30:00Z",
+    "updated_at": "2026-06-29T23:30:00Z",
+    "permissions_count": 1,
+    "users_count": 0
+  }
+}
+```
+
+---
+
+### 27. Get Role Detail
+#### Endpoint
+`GET /api/v1/roles/{id}/`
+
+#### Query Parameters
+* **user_page**: Page number for assigned users pagination (default: `1`).
+* **user_page_size**: Number of assigned users per page (default: `10`).
+
+#### Success Response
+* **Status**: `200 OK`
+* **Payload**:
+```json
+{
+  "success": true,
+  "message": "Role details retrieved successfully.",
+  "data": {
+    "id": "e402fdbe-389d-4001-a189-e2b202c4819d",
+    "name": "DOCTOR",
+    "description": "Clinical role for doctors.",
+    "is_system": true,
+    "is_active": true,
+    "created_at": "2026-06-20T10:00:00Z",
+    "updated_at": "2026-06-23T14:30:00Z",
+    "created_by": "System",
+    "updated_by": "admin@test.com",
+    "users_count": 15,
+    "permissions_count": 5,
+    "permissions": [
+      {
+        "id": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+        "name": "View Patients",
+        "code": "view_patients",
+        "group": "Patient Management",
+        "description": "Can view patient records",
+        "assigned": true
+      }
+    ],
+    "assigned_users": {
+      "count": 15,
+      "page": 1,
+      "page_size": 10,
+      "total_pages": 2,
+      "next": "https://api.neuroblooms.com/api/v1/roles/e402fdbe-389d-4001-a189-e2b202c4819d/?user_page=2&user_page_size=10",
+      "previous": null,
+      "results": [
+        {
+          "id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+          "profile_image": null,
+          "full_name": "Doctor User",
+          "email": "doctor@test.com",
+          "phone": "1234567890",
+          "status": "Active",
+          "last_login": "2026-06-29T18:00:00Z",
+          "can_remove": true
+        }
+      ]
+    }
+  }
+}
+```
+
+---
+
+### 28. Update Role
+#### Endpoint
+`PATCH /api/v1/roles/{id}/`
+
+#### Request Payload
+```json
+{
+  "description": "Updated clinical role description.",
+  "permissions": [
+    "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+    "b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e"
+  ]
+}
+```
+
+#### Validation Rules
+1. **System Roles**: If `is_system` is `true`, updating `name` is prohibited.
+2. **Deactivation**: If `is_active` is set to `false` on the `ADMIN` role, it will be rejected to prevent lockout.
+
+---
+
+### 29. Delete Role (Soft Delete)
+#### Endpoint
+`DELETE /api/v1/roles/{id}/`
+
+#### Description
+Marks a role as deleted (`is_deleted = true`).
+
+#### Validation Rules
+1. **System Roles**: Cannot delete system roles (`is_system = true`).
+2. **Assigned Users**: Cannot delete a role that has active user assignments.
+
+---
+
+### 30. Assign Permissions to Role
+#### Endpoint
+`POST /api/v1/roles/{id}/permissions/assign/`
+
+#### Request Payload
+```json
+{
+  "permission_ids": [
+    "b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e"
+  ]
+}
+```
+
+---
+
+### 31. Remove Permissions from Role
+#### Endpoint
+`POST /api/v1/roles/{id}/permissions/remove/`
+
+#### Request Payload
+```json
+{
+  "permission_ids": [
+    "b2c3d4e5-f6a7-8b9c-0d1e-2f3a4b5c6d7e"
+  ]
+}
+```
+
+#### Validation Rules
+1. Cannot remove permissions from the `ADMIN` system role.
+
+---
+
+### 32. Assign Users to Role
+#### Endpoint
+`POST /api/v1/roles/{id}/users/assign/`
+
+#### Request Payload
+```json
+{
+  "user_ids": [
+    "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+  ]
+}
+```
+
+---
+
+### 33. Remove Users from Role
+#### Endpoint
+`POST /api/v1/roles/{id}/users/remove/`
+
+#### Request Payload
+```json
+{
+  "user_ids": [
+    "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+  ]
+}
+```
+
+#### Validation Rules
+1. Cannot remove the last user from the `ADMIN` system role.
+
+---
+
+### 34. User Statistics
+#### Endpoint
+`GET /api/v1/users/statistics/`
+
+#### Description
+Returns dashboard summary statistics including counts of active, inactive, locked, and role-specific users.
+
+#### Success Response
+* **Status**: `200 OK`
+* **Payload**:
+```json
+{
+  "success": true,
+  "message": "User statistics retrieved successfully.",
+  "data": {
+    "total_users": 48,
+    "active_users": 44,
+    "inactive_users": 4,
+    "verified_users": 42,
+    "unverified_users": 6,
+    "locked_users": 2,
+    "admins": 2,
+    "doctors": 18,
+    "receptionists": 6,
+    "super_admins": 1,
+    "new_users": 3
+  }
+}
+```
+
+---
+
+### 35. Block User
+#### Endpoint
+`POST /api/v1/users/{id}/block/`
+
+#### Description
+Manually blocks a user account administratively.
+
+#### Success Response
+* **Status**: `200 OK`
+* **Payload**:
+```json
+{
+  "success": true,
+  "message": "User account blocked successfully.",
+  "data": null
+}
+```
+
+#### Validation Rules
+1. Cannot block yourself.
+2. Cannot block the final Super Admin or final Administrator.
+3. Cannot block already blocked users.
+
+---
+
+### 36. Unlock User
+#### Endpoint
+`POST /api/v1/users/{id}/unlock/`
+
+#### Description
+Unlocks a user account (removes manual blocks and deactivates any active lockout from failed login attempts).
+
+#### Success Response
+* **Status**: `200 OK`
+* **Payload**:
+```json
+{
+  "success": true,
+  "message": "User account unlocked successfully.",
+  "data": null
+}
+```
+
+#### Validation Rules
+1. Cannot unlock already unlocked users.
+
+---
+
+### 37. Activate User
+#### Endpoint
+`POST /api/v1/users/{id}/activate/`
+
+#### Description
+Activates a deactivated user.
+
+#### Success Response
+* **Status**: `200 OK`
+```json
+{
+  "success": true,
+  "message": "User account activated successfully.",
+  "data": null
+}
+```
+
+---
+
+### 38. Deactivate User
+#### Endpoint
+`POST /api/v1/users/{id}/deactivate/`
+
+#### Description
+Deactivates a user account.
+
+#### Success Response
+* **Status**: `200 OK`
+```json
+{
+  "success": true,
+  "message": "User account deactivated successfully.",
+  "data": null
+}
+```
+
+#### Validation Rules
+1. Cannot deactivate yourself.
+2. Cannot deactivate the final Super Admin or final Administrator.
+
+---
+
+### 39. Reset Password (Admin)
+#### Endpoint
+`POST /api/v1/users/{id}/reset-password/`
+
+#### Description
+Resets a user's password by an administrator.
+
+#### Request Payload
+```json
+{
+  "password": "NewSecurePassword123!"
+}
+```
+
+#### Success Response
+* **Status**: `200 OK`
+```json
+{
+  "success": true,
+  "message": "Password reset successfully.",
+  "data": null
+}
+```
+
+---
+
+### 40. Assign Roles to User
+#### Endpoint
+`POST /api/v1/users/{id}/roles/assign/`
+
+#### Request Payload
+```json
+{
+  "roles": ["DOCTOR"]
+}
+```
+
+#### Success Response
+* **Status**: `200 OK`
+```json
+{
+  "success": true,
+  "message": "Roles assigned successfully.",
+  "data": null
+}
+```
+
+#### Validation Rules
+1. Cannot assign duplicate roles.
+2. Cannot assign invalid roles.
+
+---
+
+### 41. Remove Roles from User
+#### Endpoint
+`POST /api/v1/users/{id}/roles/remove/`
+
+#### Request Payload
+```json
+{
+  "roles": ["DOCTOR"]
+}
+```
+
+#### Success Response
+* **Status**: `200 OK`
+```json
+{
+  "success": true,
+  "message": "Roles removed successfully.",
+  "data": null
+}
+```
+
+#### Validation Rules
+1. Cannot remove the last `ADMIN` role from the final administrator.
+
+---
+
+### 42. List User Sessions
+#### Endpoint
+`GET /api/v1/users/{id}/sessions/`
+
+#### Success Response
+* **Status**: `200 OK`
+```json
+{
+  "success": true,
+  "message": "Sessions retrieved successfully.",
+  "data": {
+    "count": 1,
+    "page": 1,
+    "page_size": 10,
+    "total_pages": 1,
+    "results": [
+      {
+        "id": "c8d9e0f1-a2b3-c4d5-e6f7-0a1b2c3d4e5f",
+        "device": "Desktop",
+        "browser": "Chrome 120.0.0",
+        "platform": "Windows",
+        "ip_address": "127.0.0.1",
+        "location": "Localhost",
+        "login_time": "2026-06-30T00:00:00Z",
+        "last_activity": "2026-06-30T00:05:00Z",
+        "current_session": false,
+        "can_revoke": true
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 43. Revoke User Session
+#### Endpoint
+`POST /api/v1/users/{id}/sessions/{session_id}/revoke/`
+
+#### Success Response
+* **Status**: `200 OK`
+```json
+{
+  "success": true,
+  "message": "Session revoked successfully.",
+  "data": null
+}
+```
+
+---
+
+### 44. Logout User from All Devices
+#### Endpoint
+`POST /api/v1/users/{id}/logout-all/`
+
+#### Success Response
+* **Status**: `200 OK`
+```json
+{
+  "success": true,
+  "message": "All sessions revoked successfully.",
+  "data": null
+}
+```
+
+---
+
+### 45. List User Activity Logs
+#### Endpoint
+`GET /api/v1/users/{id}/activity/`
+
+#### Success Response
+* **Status**: `200 OK`
+```json
+{
+  "success": true,
+  "message": "Activity logs retrieved successfully.",
+  "data": {
+    "count": 1,
+    "page": 1,
+    "page_size": 10,
+    "total_pages": 1,
+    "results": [
+      {
+        "timestamp": "2026-06-30T00:00:00Z",
+        "performed_by": "admin@neuroblooms.com",
+        "ip": "127.0.0.1",
+        "action": "USER_UPDATED",
+        "description": "Admin admin@neuroblooms.com updated user doctor@neuroblooms.com."
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 46. List User Security Logs
+#### Endpoint
+`GET /api/v1/users/{id}/security/`
+
+#### Success Response
+* **Status**: `200 OK`
+```json
+{
+  "success": true,
+  "message": "Security logs retrieved successfully.",
+  "data": {
+    "count": 1,
+    "page": 1,
+    "page_size": 10,
+    "total_pages": 1,
+    "results": [
+      {
+        "timestamp": "2026-06-30T00:00:00Z",
+        "performed_by": "doctor@neuroblooms.com",
+        "ip": "127.0.0.1",
+        "action": "LOGIN",
+        "description": "User logged in successfully via two-step OTP verification."
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 47. Active Roles Dropdown
+#### Endpoint
+`GET /api/v1/roles/dropdown/`
+
+#### Success Response
+* **Status**: `200 OK`
+```json
+{
+  "success": true,
+  "message": "Active roles retrieved successfully.",
+  "data": [
+    {
+      "id": "e4f5a6b7-c8d9-0e1f-2a3b-4c5d6e7f8a9b",
+      "name": "ADMIN"
+    },
+    {
+      "id": "f5a6b7c8-d90e-1f2a-3b4c-5d6e7f8a9b0c",
+      "name": "DOCTOR"
+    }
+  ]
+}
+```
 
 ---
 

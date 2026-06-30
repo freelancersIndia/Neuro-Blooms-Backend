@@ -36,7 +36,11 @@ class ClinicBreakViewSet(viewsets.ViewSet):
         )
 
     def partial_update(self, request, pk=None):
-        serializer = ClinicBreakSerializer(data=request.data, partial=True)
+        from django.shortcuts import get_object_or_404
+        from apps.consultations.models.clinic_break import ClinicBreak
+
+        clinic_break = get_object_or_404(ClinicBreak, id=pk, is_active=True)
+        serializer = ClinicBreakSerializer(clinic_break, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
 
         ip_address = get_client_ip(request)

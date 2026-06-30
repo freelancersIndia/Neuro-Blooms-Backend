@@ -8,8 +8,8 @@ class ClinicBreakSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ClinicBreak
-        fields = ["id", "break_name", "weekday", "start_time", "end_time", "is_active"]
-        read_only_fields = ["id", "is_active"]
+        fields = ["id", "break_name", "weekday", "start_time", "end_time", "is_active", "created_at"]
+        read_only_fields = ["id", "is_active", "created_at"]
 
     def validate_break_name(self, value):
         if value is not None:

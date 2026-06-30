@@ -1,4 +1,4 @@
-from .user import User, Role, UserRole, FailedLoginAttempt, AccountLock
+from .user import User, Role, UserRole, FailedLoginAttempt, AccountLock, Permission
 from .otp import OTP
 from .session import UserSession
 from .activity_log import ActivityLog
@@ -12,4 +12,5 @@ __all__ = [
     'OTP',
     'UserSession',
     'ActivityLog',
+    'Permission',
 ]

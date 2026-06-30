@@ -7,8 +7,8 @@ class ClinicHolidaySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ClinicHoliday
-        fields = ["id", "holiday_name", "holiday_date", "description", "is_active"]
-        read_only_fields = ["id", "is_active"]
+        fields = ["id", "holiday_name", "holiday_date", "description", "created_at","is_active"]
+        read_only_fields = ["id", "is_active", "created_at"]
 
     def validate_holiday_name(self, value):
         if value is not None:

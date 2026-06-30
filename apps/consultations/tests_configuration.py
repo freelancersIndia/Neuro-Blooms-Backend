@@ -295,6 +295,28 @@ class ClinicConfigurationTestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("holiday_date", response.data["errors"])
 
+    def test_clinic_holiday_update_same_date(self):
+        self.client.force_authenticate(user=self.admin_user)
+        list_url = reverse("clinic-holiday-list")
+
+        # Create holiday
+        response = self.client.post(list_url, {
+            "holiday_name": "National Day",
+            "holiday_date": "2026-08-15",
+            "description": "Celebrate freedom"
+        })
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        holiday_id = response.data["data"]["id"]
+
+        # Update holiday keeping the same date
+        detail_url = reverse("clinic-holiday-detail", args=[holiday_id])
+        response = self.client.patch(detail_url, {
+            "holiday_name": "National Day Updated",
+            "holiday_date": "2026-08-15"
+        })
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["data"]["holiday_name"], "National Day Updated")
+
     # ==========================================
     # 4. CLINIC BREAKS TESTS
     # ==========================================

@@ -14,13 +14,17 @@ from apps.accounts.api.views import (
     UserSessionViewSet,
     UserAdminViewSet,
     SecurityLogListView,
+    RoleViewSet,
 )
+from apps.accounts.api.views.doctor import DoctorListView, DoctorDetailView
 
 router = DefaultRouter()
 # Route GET /api/v1/users/, POST /api/v1/users/, etc.
 router.register('users', UserAdminViewSet, basename='users')
 # Route GET /api/v1/sessions/, DELETE /api/v1/sessions/{id}/, POST /api/v1/sessions/logout-all/
 router.register('sessions', UserSessionViewSet, basename='sessions')
+# Route GET /api/v1/roles/, POST /api/v1/roles/, etc.
+router.register('roles', RoleViewSet, basename='roles')
 
 urlpatterns = [
     # Authentication endpoints
@@ -41,9 +45,14 @@ urlpatterns = [
     # Profile endpoints
     path('profile/me/', ProfileView.as_view(), name='profile_me'),
 
+    # Doctor directory endpoints
+    path('doctors/', DoctorListView.as_view(), name='doctor_list'),
+    path('doctors/<uuid:id>/', DoctorDetailView.as_view(), name='doctor_detail'),
+
     # Security Log endpoints (Admin only)
     path('security-logs/', SecurityLogListView.as_view(), name='security_logs'),
 
     # Router registered views (Users and Sessions)
+    path('users/<uuid:id>/sessions/<uuid:session_id>/revoke/', UserAdminViewSet.as_view({'post': 'session_revoke'}), name='user_session_revoke'),
     path('', include(router.urls)),
 ]

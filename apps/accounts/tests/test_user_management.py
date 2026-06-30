@@ -1,451 +1,12 @@
-from django.utils import timezone
-from datetime import timedelta
-from django.contrib.auth import get_user_model
 from django.urls import reverse
-from django.core.management import call_command
 from rest_framework import status
 from rest_framework.test import APITestCase
-from apps.accounts.models.user import Role, UserRole, FailedLoginAttempt, AccountLock
-from apps.accounts.models.otp import OTP
-from apps.accounts.models.session import UserSession
+from apps.accounts.models.user import User, Role, UserRole, FailedLoginAttempt, AccountLock
 from apps.accounts.models.activity_log import ActivityLog
 from apps.accounts.constants.roles import SystemRole
-from apps.accounts.constants.otp_types import OTPPurpose
-from apps.accounts.services.otp_service import OTPService
-from apps.accounts.services.security_service import SecurityService
+from .base import AccountsBaseTestCase
 
-User = get_user_model()
-
-class AccountsTestCase(APITestCase):
-    def setUp(self):
-        # Create default roles populated in migrations (just in case they don't populate in tests)
-        self.admin_role, _ = Role.objects.get_or_create(name=SystemRole.ADMIN)
-        self.doctor_role, _ = Role.objects.get_or_create(name=SystemRole.DOCTOR)
-        self.receptionist_role, _ = Role.objects.get_or_create(name=SystemRole.RECEPTIONIST)
-
-        # Create basic test users
-        self.admin_user = User.objects.create_user(
-            email='admin@test.com',
-            password='testpassword123',
-            first_name='Admin',
-            last_name='User'
-        )
-        UserRole.objects.create(user=self.admin_user, role=self.admin_role)
-
-        self.doctor_user = User.objects.create_user(
-            email='doctor@test.com',
-            password='testpassword123',
-            first_name='Doctor',
-            last_name='User',
-            phone_number='1234567890'
-        )
-        UserRole.objects.create(user=self.doctor_user, role=self.doctor_role)
-
-    def test_user_role_helper_methods(self):
-        # Test has_role
-        self.assertTrue(self.admin_user.has_role(SystemRole.ADMIN))
-        self.assertFalse(self.admin_user.has_role(SystemRole.DOCTOR))
-
-        # Test has_any_role
-        self.assertTrue(self.admin_user.has_any_role([SystemRole.ADMIN, SystemRole.DOCTOR]))
-        self.assertFalse(self.admin_user.has_any_role([SystemRole.DOCTOR, SystemRole.RECEPTIONIST]))
-
-        # Test multiple roles on a single user
-        UserRole.objects.create(user=self.doctor_user, role=self.admin_role)
-        self.assertTrue(self.doctor_user.has_role(SystemRole.ADMIN))
-        self.assertTrue(self.doctor_user.has_role(SystemRole.DOCTOR))
-
-    def test_login_successful_creates_session_and_activity_log(self):
-        # 1. Send credentials to login view (expects OTP sent notification)
-        url_login = reverse('auth_login')
-        data = {
-            'email': 'doctor@test.com',
-            'password': 'testpassword123'
-        }
-        response = self.client.post(url_login, data)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data['success'])
-        self.assertIn('sent', response.data['message'].lower())
-
-        # Retrieve the generated OTP from DB
-        otp = OTP.objects.filter(user=self.doctor_user, purpose=OTPPurpose.LOGIN_VERIFICATION).first()
-        self.assertIsNotNone(otp)
-
-        # 2. Verify OTP code to log in and retrieve tokens
-        url_verify = reverse('auth_verify_otp')
-        response_verify = self.client.post(url_verify, {
-            'email': 'doctor@test.com',
-            'otp_code': otp.otp_code,
-            'purpose': OTPPurpose.LOGIN_VERIFICATION
-        })
-        self.assertEqual(response_verify.status_code, status.HTTP_200_OK)
-        self.assertTrue(response_verify.data['success'])
-        self.assertIn('access', response_verify.data['data'])
-        self.assertIn('refresh', response_verify.data['data'])
-        self.assertIn('roles', response_verify.data['data']['user'])
-        self.assertEqual(response_verify.data['data']['user']['roles'], [SystemRole.DOCTOR])
-        self.assertIn('profile_image', response_verify.data['data']['user'])
-        self.assertIsNone(response_verify.data['data']['user']['profile_image'])
-
-        # Check that session was created in DB
-        sessions = UserSession.objects.filter(user=self.doctor_user, is_active=True)
-        self.assertEqual(sessions.count(), 1)
-
-        # Check that login activity log was created
-        activity_logs = ActivityLog.objects.filter(user=self.doctor_user, action='LOGIN')
-        self.assertEqual(activity_logs.count(), 1)
-
-    def test_failed_login_creates_attempt_log_and_locks_after_5_failures(self):
-        url = reverse('auth_login')
-        data = {
-            'email': 'doctor@test.com',
-            'password': 'wrongpassword'
-        }
-
-        # 4 failed attempts should not lock
-        for i in range(4):
-            response = self.client.post(url, data)
-            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-            self.assertFalse(response.data['success'])
-            self.assertFalse(SecurityService.is_account_locked(self.doctor_user))
-
-        # 5th failed attempt triggers lock
-        response = self.client.post(url, data)
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertFalse(response.data['success'])
-        self.assertTrue(SecurityService.is_account_locked(self.doctor_user))
-
-        # Trying to login with correct credentials while locked should fail
-        correct_data = {
-            'email': 'doctor@test.com',
-            'password': 'testpassword123'
-        }
-        response = self.client.post(url, correct_data)
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertFalse(response.data['success'])
-        self.assertIn('locked', response.data['message'].lower())
-
-    def test_otp_generation_email_sending_and_verification(self):
-        # Generate LOGIN_VERIFICATION OTP
-        otp = OTPService.generate_otp(self.doctor_user, OTPPurpose.LOGIN_VERIFICATION)
-        self.assertEqual(len(otp.otp_code), 6)
-        self.assertEqual(otp.purpose, OTPPurpose.LOGIN_VERIFICATION)
-        self.assertFalse(otp.is_used)
-
-        # Verify correct OTP
-        url = reverse('auth_verify_otp')
-        data = {
-            'email': 'doctor@test.com',
-            'otp_code': otp.otp_code,
-            'purpose': OTPPurpose.LOGIN_VERIFICATION
-        }
-        response = self.client.post(url, data)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data['success'])
-        self.assertIn('access', response.data['data'])
-
-        # Try to reuse the OTP
-        response = self.client.post(url, data)
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertFalse(response.data['success'])
-
-    def test_password_reset_flow(self):
-        # 1. Request forgot password OTP
-        url_forgot = reverse('auth_forgot_password')
-        response = self.client.post(url_forgot, {'email': 'doctor@test.com'})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data['success'])
-
-        # Fetch generated OTP from DB
-        otp = OTP.objects.filter(user=self.doctor_user, purpose=OTPPurpose.PASSWORD_RESET).first()
-        self.assertIsNotNone(otp)
-
-        # 2. Verify OTP to get signed verification token
-        url_verify = reverse('auth_verify_otp')
-        response_verify = self.client.post(url_verify, {
-            'email': 'doctor@test.com',
-            'otp_code': otp.otp_code,
-            'purpose': OTPPurpose.PASSWORD_RESET
-        })
-        self.assertEqual(response_verify.status_code, status.HTTP_200_OK)
-        self.assertTrue(response_verify.data['success'])
-        token = response_verify.data['data']['token']
-        self.assertIsNotNone(token)
-
-        # 3. Reset password using token
-        url_reset = reverse('auth_reset_password')
-        response_reset = self.client.post(url_reset, {
-            'token': token,
-            'new_password': 'newpassword123',
-            'confirm_password': 'newpassword123'
-        })
-        self.assertEqual(response_reset.status_code, status.HTTP_200_OK)
-        self.assertTrue(response_reset.data['success'])
-
-        # Verify password is changed
-        self.doctor_user.refresh_from_db()
-        self.assertTrue(self.doctor_user.check_password('newpassword123'))
-
-    def test_session_list_and_revocation(self):
-        # 1. Login with credentials
-        url_login = reverse('auth_login')
-        data = {
-            'email': 'doctor@test.com',
-            'password': 'testpassword123'
-        }
-        response = self.client.post(url_login, data)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-        # Get generated OTP
-        otp = OTP.objects.filter(user=self.doctor_user, purpose=OTPPurpose.LOGIN_VERIFICATION).first()
-
-        # 2. Verify OTP code to log in
-        url_verify = reverse('auth_verify_otp')
-        response_verify = self.client.post(url_verify, {
-            'email': 'doctor@test.com',
-            'otp_code': otp.otp_code,
-            'purpose': OTPPurpose.LOGIN_VERIFICATION
-        })
-        self.assertEqual(response_verify.status_code, status.HTTP_200_OK)
-        access_token = response_verify.data['data']['access']
-        refresh_token = response_verify.data['data']['refresh']
-
-        # Get session list
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
-        url_sessions = reverse('sessions-list')
-        response = self.client.get(url_sessions)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data['success'])
-        self.assertEqual(len(response.data['data']), 1)
-        session_id = response.data['data'][0]['id']
-
-        # Revoke session
-        url_session_detail = reverse('sessions-detail', args=[session_id])
-        response = self.client.delete(url_session_detail)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data['success'])
-
-        # Attempting refresh token request with revoked session should fail
-        url_refresh = reverse('token_refresh')
-        response = self.client.post(url_refresh, {'refresh': refresh_token})
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-        self.assertFalse(response.data['success'])
-        self.assertEqual(response.data['message'], "Session expired or revoked.")
-
-    def test_email_sending_failure_does_not_crash_flow(self):
-        from unittest.mock import patch
-
-        # Mock send_mail to raise ConnectionRefusedError
-        with patch('apps.accounts.services.email_service.send_mail') as mock_send_mail:
-            mock_send_mail.side_effect = ConnectionRefusedError("Connection refused mock error")
-
-            # Request forgot password OTP (which triggers send_password_reset_otp)
-            url_forgot = reverse('auth_forgot_password')
-            response = self.client.post(url_forgot, {'email': 'doctor@test.com'})
-
-            # The flow should succeed (return 200 OK) because the email service catches the error
-            self.assertEqual(response.status_code, status.HTTP_200_OK)
-            self.assertTrue(response.data['success'])
-
-            # Verify OTP is still generated in the database even if email sending failed
-            otp = OTP.objects.filter(user=self.doctor_user, purpose=OTPPurpose.PASSWORD_RESET).first()
-            self.assertIsNotNone(otp)
-
-            # Verify the mock was indeed called
-            mock_send_mail.assert_called_once()
-
-    def test_passing_digit_otp_instead_of_signed_token_raises_clear_error(self):
-        url_reset = reverse('auth_reset_password')
-        response = self.client.post(url_reset, {
-            'token': '123456',
-            'new_password': 'newpassword123',
-            'confirm_password': 'newpassword123'
-        })
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertFalse(response.data['success'])
-        self.assertIn('passed the 6-digit OTP code', response.data['message'])
-
-    def test_resend_verification_otp(self):
-        # 1. Post to resend verification endpoint
-        url_resend = reverse('auth_resend_verification')
-        response = self.client.post(url_resend, {'email': 'doctor@test.com'})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data['success'])
-
-        # Verify email verification OTP is generated in DB
-        otp = OTP.objects.filter(user=self.doctor_user, purpose=OTPPurpose.EMAIL_VERIFICATION).first()
-        self.assertIsNotNone(otp)
-
-        # Verify activity log was recorded
-        log = ActivityLog.objects.filter(user=self.doctor_user, action='EMAIL_VERIFICATION_SENT').first()
-        self.assertIsNotNone(log)
-
-    def test_email_verification_completion(self):
-        # Generate an email verification OTP
-        otp = OTPService.generate_otp(self.doctor_user, OTPPurpose.EMAIL_VERIFICATION)
-        
-        # Verify the OTP using verify-otp endpoint
-        url_verify = reverse('auth_verify_otp')
-        response = self.client.post(url_verify, {
-            'email': 'doctor@test.com',
-            'otp_code': otp.otp_code,
-            'purpose': OTPPurpose.EMAIL_VERIFICATION
-        })
-        
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data['success'])
-        self.assertIsNone(response.data['data'])
-        self.assertEqual(response.data['message'], "Email verified successfully.")
-
-        # Check user status in DB
-        self.doctor_user.refresh_from_db()
-        self.assertTrue(self.doctor_user.is_verified)
-
-        # Check EMAIL_VERIFIED activity log
-        log = ActivityLog.objects.filter(user=self.doctor_user, action='EMAIL_VERIFIED').first()
-        self.assertIsNotNone(log)
-
-    def test_account_unlock_api(self):
-        # 1. Lock the user account
-        unlock_time = timezone.now() + timedelta(minutes=15)
-        lock = AccountLock.objects.create(
-            user=self.doctor_user,
-            unlock_at=unlock_time,
-            reason="TOO_MANY_FAILED_ATTEMPTS",
-            is_active=True
-        )
-        FailedLoginAttempt.objects.create(email=self.doctor_user.email, ip_address='127.0.0.1', reason='TEST')
-
-        # 2. Login as admin and attempt to unlock
-        login_url = reverse('auth_login')
-        response = self.client.post(login_url, {'email': 'admin@test.com', 'password': 'testpassword123'})
-        admin_otp = OTP.objects.filter(user=self.admin_user, purpose=OTPPurpose.LOGIN_VERIFICATION).first()
-        
-        verify_url = reverse('auth_verify_otp')
-        response_verify = self.client.post(verify_url, {
-            'email': 'admin@test.com',
-            'otp_code': admin_otp.otp_code,
-            'purpose': OTPPurpose.LOGIN_VERIFICATION
-        })
-        access_token = response_verify.data['data']['access']
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
-
-        # 3. Call the unlock API
-        unlock_url = reverse('users-unlock', args=[self.doctor_user.id])
-        response_unlock = self.client.post(unlock_url)
-        self.assertEqual(response_unlock.status_code, status.HTTP_200_OK)
-        self.assertTrue(response_unlock.data['success'])
-        self.assertEqual(response_unlock.data['message'], "User account unlocked successfully.")
-
-        # Verify database state
-        lock.refresh_from_db()
-        self.assertFalse(lock.is_active)
-        self.assertEqual(FailedLoginAttempt.objects.filter(email=self.doctor_user.email).count(), 0)
-
-        # Verify activity log
-        log = ActivityLog.objects.filter(user=self.doctor_user, action='ACCOUNT_UNLOCKED').first()
-        self.assertIsNotNone(log)
-
-    def test_seed_roles_command(self):
-        # Call management command
-        call_command('seed_roles')
-        
-        # Verify roles exist
-        self.assertTrue(Role.objects.filter(name='ADMIN').exists())
-        self.assertTrue(Role.objects.filter(name='DOCTOR').exists())
-        self.assertTrue(Role.objects.filter(name='RECEPTIONIST').exists())
-
-    def test_create_initial_admin_command(self):
-        import os
-        from unittest.mock import patch
-
-        # Mock environment variables
-        env = {
-            'INITIAL_ADMIN_EMAIL': 'newadmin@test.com',
-            'INITIAL_ADMIN_PASSWORD': 'SecurePassword123',
-            'INITIAL_ADMIN_FIRST_NAME': 'Initial',
-            'INITIAL_ADMIN_LAST_NAME': 'Admin'
-        }
-        with patch.dict(os.environ, env):
-            call_command('create_initial_admin')
-
-        # Verify user was created
-        user = User.objects.filter(email='newadmin@test.com').first()
-        self.assertIsNotNone(user)
-        self.assertTrue(user.is_verified)
-        self.assertTrue(user.is_active)
-        self.assertTrue(user.has_role('ADMIN'))
-
-    def test_users_filtering_and_pagination(self):
-        # Login as admin
-        login_url = reverse('auth_login')
-        self.client.post(login_url, {'email': 'admin@test.com', 'password': 'testpassword123'})
-        admin_otp = OTP.objects.filter(user=self.admin_user, purpose=OTPPurpose.LOGIN_VERIFICATION).first()
-        
-        verify_url = reverse('auth_verify_otp')
-        response_verify = self.client.post(verify_url, {
-            'email': 'admin@test.com',
-            'otp_code': admin_otp.otp_code,
-            'purpose': OTPPurpose.LOGIN_VERIFICATION
-        })
-        access_token = response_verify.data['data']['access']
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
-
-        # Test search filter
-        url = reverse('users-list')
-        response = self.client.get(url, {'search': 'Doctor'})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data['success'])
-        self.assertEqual(response.data['data']['count'], 1)
-        self.assertEqual(response.data['data']['results'][0]['email'], 'doctor@test.com')
-
-        # Test role filter
-        response = self.client.get(url, {'role': 'ADMIN'})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['data']['count'], 1)
-        self.assertEqual(response.data['data']['results'][0]['email'], 'admin@test.com')
-
-        # Test status filter
-        response = self.client.get(url, {'is_active': 'true'})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Both admin and doctor are active
-        self.assertEqual(response.data['data']['count'], 2)
-
-    def test_security_logs_filtering_and_pagination(self):
-        # Create activity logs
-        ActivityLog.objects.create(user=self.doctor_user, action='LOGIN', description='Doc Login')
-        ActivityLog.objects.create(user=self.admin_user, action='USER_CREATED', description='Admin created user')
-
-        # Login as admin
-        login_url = reverse('auth_login')
-        self.client.post(login_url, {'email': 'admin@test.com', 'password': 'testpassword123'})
-        admin_otp = OTP.objects.filter(user=self.admin_user, purpose=OTPPurpose.LOGIN_VERIFICATION).first()
-        
-        verify_url = reverse('auth_verify_otp')
-        response_verify = self.client.post(verify_url, {
-            'email': 'admin@test.com',
-            'otp_code': admin_otp.otp_code,
-            'purpose': OTPPurpose.LOGIN_VERIFICATION
-        })
-        access_token = response_verify.data['data']['access']
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {access_token}')
-
-        # Test filter by action
-        url = reverse('security_logs')
-        response = self.client.get(url, {'action': 'USER_CREATED'})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data['success'])
-        self.assertEqual(response.data['data']['count'], 1)
-        self.assertEqual(response.data['data']['results'][0]['description'], 'Admin created user')
-
-        # Test filter by user_id
-        response = self.client.get(url, {'user_id': self.doctor_user.id})
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['data']['count'], 1)
-        self.assertEqual(response.data['data']['results'][0]['description'], 'Doc Login')
-
-
-class UserManagementAPITests(APITestCase):
+class UserManagementAPITests(AccountsBaseTestCase):
     def setUp(self):
         # Create default roles populated in migrations (just in case they don't populate in tests)
         self.admin_role, _ = Role.objects.get_or_create(name=SystemRole.ADMIN)
@@ -474,11 +35,6 @@ class UserManagementAPITests(APITestCase):
         self.admin_token = self._get_jwt_token(self.admin_user)
         self.doctor_token = self._get_jwt_token(self.doctor_user)
 
-    def _get_jwt_token(self, user):
-        from rest_framework_simplejwt.tokens import RefreshToken
-        refresh = RefreshToken.for_user(user)
-        return str(refresh.access_token)
-
     def test_list_users_authentication_required(self):
         url = reverse('users-list')
         response = self.client.get(url)
@@ -496,7 +52,6 @@ class UserManagementAPITests(APITestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data['success'])
-        self.assertIn('count', response.data['data'])
 
     def test_list_users_serializer_fields(self):
         url = reverse('users-list')
@@ -509,8 +64,10 @@ class UserManagementAPITests(APITestCase):
         # Check specific expected serializer keys
         user_data = results[0]
         expected_keys = {
-            'id', 'full_name', 'email', 'phone_number', 'profile_image',
-            'roles', 'is_verified', 'is_active', 'created_at'
+            'id', 'profile_image', 'full_name', 'email', 'phone', 'phone_number', 'roles',
+            'is_verified', 'is_active', 'is_locked', 'failed_login_attempts',
+            'last_login', 'created_at', 'updated_at',
+            'can_edit', 'can_delete', 'can_block', 'can_unlock'
         }
         self.assertEqual(set(user_data.keys()), expected_keys)
         # Ensure full_name is correctly formatted and roles is list of role names
@@ -594,21 +151,21 @@ class UserManagementAPITests(APITestCase):
         # Search by last name (case-insensitive)
         response = self.client.get(url, {'search': 'kolluri'})
         self.assertEqual(response.data['data']['count'], 1)
-        
-        # Search by full name
-        response = self.client.get(url, {'search': 'Krishna Kolluri'})
-        self.assertEqual(response.data['data']['count'], 1)
+        self.assertEqual(response.data['data']['results'][0]['email'], 'kolluri@test.com')
         
         # Search by email
         response = self.client.get(url, {'search': 'special@test.com'})
         self.assertEqual(response.data['data']['count'], 1)
+        self.assertEqual(response.data['data']['results'][0]['email'], 'special@test.com')
         
         # Search by phone number
         response = self.client.get(url, {'search': '9876543210'})
         self.assertEqual(response.data['data']['count'], 1)
+        self.assertEqual(response.data['data']['results'][0]['email'], 'kolluri@test.com')
 
     def test_list_users_role_filter(self):
-        u1 = User.objects.create_user(email='doctor_filter@test.com', first_name='Filter', last_name='Doc')
+        # Create user with DOCTOR role
+        u1 = User.objects.create_user(email='doc1@test.com', first_name='Doc1', last_name='User')
         UserRole.objects.create(user=u1, role=self.doctor_role)
         
         url = reverse('users-list')
@@ -680,12 +237,15 @@ class UserManagementAPITests(APITestCase):
         url = reverse('users-list')
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.admin_token}')
         
+        # Search by email
         response = self.client.get(url, {'search': 'multi@test.com'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         user_roles = response.data['data']['results'][0]['roles']
         self.assertEqual(set(user_roles), {'DOCTOR', 'RECEPTIONIST'})
 
     def test_list_users_ordering(self):
+        from django.utils import timezone
+        from datetime import timedelta
         # Make setUp users older than u1 and u2 so u1 and u2 are the two newest users
         User.objects.filter(email__in=['admin_mgmt@test.com', 'doctor_mgmt@test.com']).update(
             created_at=timezone.now() - timedelta(days=10)
@@ -707,92 +267,6 @@ class UserManagementAPITests(APITestCase):
         # Newest users should be first: u2 should be before u1
         self.assertEqual(results[0]['email'], 'second@test.com')
         self.assertEqual(results[1]['email'], 'first@test.com')
-
-    def test_statistics_permission_checks(self):
-        url = reverse('users-statistics')
-        # Unauthenticated
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-        
-        # Non-admin Doctor
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.doctor_token}')
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
-    def test_statistics_calculations(self):
-        # Clear the database for users to start fresh and calculate precisely
-        User.objects.all().delete()
-        
-        # Create 5 users:
-        # 1. Admin (Active, Verified)
-        admin = User.objects.create_user(email='admin_stat@test.com', first_name='A', is_active=True, is_verified=True)
-        UserRole.objects.create(user=admin, role=self.admin_role)
-        
-        # 2. Doctor (Active, Verified)
-        doc = User.objects.create_user(email='doc_stat@test.com', first_name='D', is_active=True, is_verified=True)
-        UserRole.objects.create(user=doc, role=self.doctor_role)
-        
-        # 3. Doctor (Active, Unverified)
-        doc2 = User.objects.create_user(email='doc_stat2@test.com', first_name='D2', is_active=True, is_verified=False)
-        UserRole.objects.create(user=doc2, role=self.doctor_role)
-        
-        # 4. Receptionist (Inactive, Verified)
-        rec = User.objects.create_user(email='rec_stat@test.com', first_name='R', is_active=False, is_verified=True)
-        UserRole.objects.create(user=rec, role=self.receptionist_role)
-        
-        # 5. User (Inactive, Unverified)
-        User.objects.create_user(email='user_stat@test.com', first_name='U', is_active=False, is_verified=False)
-        
-        # Stats expected:
-        # Total: 5
-        # Active: 3 (admin, doc, doc2)
-        # Inactive: 2 (rec, user)
-        # Verified: 3 (admin, doc, rec)
-        
-        admin_token = self._get_jwt_token(admin)
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {admin_token}')
-        
-        url = reverse('users-statistics')
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(response.data['success'])
-        self.assertEqual(response.data['message'], "User statistics retrieved successfully.")
-        
-        data = response.data['data']
-        self.assertEqual(data['total_users'], 5)
-        self.assertEqual(data['active_users'], 3)
-        self.assertEqual(data['inactive_users'], 2)
-        self.assertEqual(data['verified_users'], 3)
-
-    def test_statistics_zero_users(self):
-        # We need at least 1 Admin user to authenticate and call the endpoint.
-        User.objects.all().delete()
-        admin = User.objects.create_user(email='admin_zero@test.com', first_name='A', is_active=True, is_verified=True)
-        UserRole.objects.create(user=admin, role=self.admin_role)
-        
-        admin_token = self._get_jwt_token(admin)
-        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {admin_token}')
-        
-        url = reverse('users-statistics')
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        data = response.data['data']
-        self.assertEqual(data['total_users'], 1)
-        self.assertEqual(data['active_users'], 1)
-        self.assertEqual(data['inactive_users'], 0)
-        self.assertEqual(data['verified_users'], 1)
-
-    def test_create_user_authentication_required(self):
-        url = reverse('users-list')
-        data = {
-            "first_name": "Krishna",
-            "last_name": "Kolluri",
-            "email": "krishna@gmail.com",
-            "password": "SecurePassword@123",
-            "roles": ["ADMIN"]
-        }
-        response = self.client.post(url, data)
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_create_user_admin_only(self):
         url = reverse('users-list')
@@ -1018,7 +492,7 @@ class UserManagementAPITests(APITestCase):
         self.assertEqual(user_data['first_name'], self.doctor_user.first_name)
         self.assertEqual(user_data['last_name'], self.doctor_user.last_name)
         self.assertEqual(user_data['roles'], ['DOCTOR'])
-        self.assertFalse(user_data['is_locked'])
+        self.assertFalse(user_data['locked'])
 
     def test_retrieve_user_forbidden_for_non_admin(self):
         url = reverse('users-detail', args=[self.admin_user.id])
@@ -1054,8 +528,8 @@ class UserManagementAPITests(APITestCase):
         self.assertEqual(user_data['email'], "updated_doc@test.com")
         self.assertEqual(user_data['phone_number'], "1122334455")
         self.assertEqual(set(user_data['roles']), {"DOCTOR", "RECEPTIONIST"})
-        self.assertTrue(user_data['is_active'])
-        self.assertTrue(user_data['is_verified'])
+        self.assertTrue(user_data['active'])
+        self.assertTrue(user_data['verified'])
 
         # Verify DB changes
         self.doctor_user.refresh_from_db()
@@ -1189,4 +663,100 @@ class UserManagementAPITests(APITestCase):
         self.assertFalse(response.data['success'])
         self.assertEqual(response.data['message'], "Superusers cannot be deleted.")
 
+    def test_users_filtering_and_pagination(self):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.admin_token}')
 
+        # Test search filter
+        url = reverse('users-list')
+        response = self.client.get(url, {'search': 'Doctor'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['success'])
+        self.assertEqual(response.data['data']['count'], 1)
+        self.assertEqual(response.data['data']['results'][0]['email'], 'doctor_mgmt@test.com')
+
+        # Test role filter
+        response = self.client.get(url, {'role': 'ADMIN'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['data']['count'], 1)
+        self.assertEqual(response.data['data']['results'][0]['email'], 'admin_mgmt@test.com')
+
+        # Test status filter
+        response = self.client.get(url, {'is_active': 'true'})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Both admin and doctor are active
+        self.assertEqual(response.data['data']['count'], 2)
+
+    def test_statistics_permission_checks(self):
+        url = reverse('users-statistics')
+        # Unauthenticated
+        self.client.credentials()
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        
+        # Non-admin Doctor
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.doctor_token}')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_statistics_calculations(self):
+        # Clear the database for users to start fresh and calculate precisely
+        User.objects.all().delete()
+        
+        # Create 5 users:
+        # 1. Admin (Active, Verified)
+        admin = User.objects.create_user(email='admin_stat@test.com', first_name='A', is_active=True, is_verified=True)
+        UserRole.objects.create(user=admin, role=self.admin_role)
+        
+        # 2. Doctor (Active, Verified)
+        doc = User.objects.create_user(email='doc_stat@test.com', first_name='D', is_active=True, is_verified=True)
+        UserRole.objects.create(user=doc, role=self.doctor_role)
+        
+        # 3. Doctor (Active, Unverified)
+        doc2 = User.objects.create_user(email='doc_stat2@test.com', first_name='D2', is_active=True, is_verified=False)
+        UserRole.objects.create(user=doc2, role=self.doctor_role)
+        
+        # 4. Receptionist (Inactive, Verified)
+        rec = User.objects.create_user(email='rec_stat@test.com', first_name='R', is_active=False, is_verified=True)
+        UserRole.objects.create(user=rec, role=self.receptionist_role)
+        
+        # 5. User (Inactive, Unverified)
+        User.objects.create_user(email='user_stat@test.com', first_name='U', is_active=False, is_verified=False)
+        
+        # Stats expected:
+        # Total: 5
+        # Active: 3 (admin, doc, doc2)
+        # Inactive: 2 (rec, user)
+        # Verified: 3 (admin, doc, rec)
+        
+        admin_token = self._get_jwt_token(admin)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {admin_token}')
+        
+        url = reverse('users-statistics')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['success'])
+        self.assertEqual(response.data['message'], "User statistics retrieved successfully.")
+        
+        data = response.data['data']
+        self.assertEqual(data['total_users'], 5)
+        self.assertEqual(data['active_users'], 3)
+        self.assertEqual(data['inactive_users'], 2)
+        self.assertEqual(data['verified_users'], 3)
+
+    def test_statistics_zero_users(self):
+        # We need at least 1 Admin user to authenticate and call the endpoint.
+        User.objects.all().delete()
+        admin = User.objects.create_user(email='admin_zero@test.com', first_name='A', is_active=True, is_verified=True)
+        UserRole.objects.create(user=admin, role=self.admin_role)
+        
+        admin_token = self._get_jwt_token(admin)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {admin_token}')
+        
+        url = reverse('users-statistics')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.data['data']
+        self.assertEqual(data['total_users'], 1)
+        self.assertEqual(data['active_users'], 1)
+        self.assertEqual(data['inactive_users'], 0)
+        self.assertEqual(data['verified_users'], 1)

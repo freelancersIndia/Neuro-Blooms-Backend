@@ -67,9 +67,9 @@ class ClinicSettingsService:
         settings.save()
 
         # Deleting old logo after successful database save
-        if old_logo_file:
+        if old_logo_file and old_logo_file.name:
             try:
-                old_logo_file.delete(save=False)
+                old_logo_file.storage.delete(old_logo_file.name)
             except Exception:
                 pass
 

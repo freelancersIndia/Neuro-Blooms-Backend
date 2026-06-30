@@ -4,6 +4,8 @@ from .password import ForgotPasswordSerializer, ResetPasswordSerializer, ChangeP
 from .profile import ProfileSerializer
 from .user import UserAdminSerializer, UserListSerializer
 from .create_user_serializer import CreateUserSerializer, CreatedUserResponseSerializer
+from .permission import PermissionSerializer
+from .role import RoleListSerializer, RoleDetailSerializer, RoleCreateUpdateSerializer
 
 __all__ = [
     'LoginSerializer',
@@ -19,4 +21,8 @@ __all__ = [
     'UserListSerializer',
     'CreateUserSerializer',
     'CreatedUserResponseSerializer',
+    'PermissionSerializer',
+    'RoleListSerializer',
+    'RoleDetailSerializer',
+    'RoleCreateUpdateSerializer',
 ]

@@ -38,7 +38,11 @@ class DoctorLeaveViewSet(viewsets.ViewSet):
         )
 
     def partial_update(self, request, doctor_id, pk=None):
-        serializer = DoctorLeaveSerializer(data=request.data, partial=True)
+        from django.shortcuts import get_object_or_404
+        from apps.consultations.models.doctor_leave import DoctorLeave
+
+        leave = get_object_or_404(DoctorLeave, id=pk, doctor_id=doctor_id, is_active=True)
+        serializer = DoctorLeaveSerializer(leave, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
 
         ip_address = get_client_ip(request)

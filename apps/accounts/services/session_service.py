@@ -6,6 +6,7 @@ class SessionService:
     def create_session(user, refresh_token_jti: str, ip_address: str, user_agent: str) -> UserSession:
         ua = parse(user_agent or '')
         browser = f"{ua.browser.family} {ua.browser.version_string}"
+        platform = ua.os.family or "Unknown"
 
         if ua.is_pc:
             device = "Desktop"
@@ -18,6 +19,16 @@ class SessionService:
         else:
             device = ua.device.family or "Unknown"
 
+        # Simple mock location logic for realistic presentation
+        if ip_address in ('127.0.0.1', '::1', 'localhost'):
+            location = "Localhost"
+        elif ip_address and (ip_address.startswith('192.168.') or ip_address.startswith('10.')):
+            location = "Local Network"
+        elif ip_address:
+            location = "Delhi, India"
+        else:
+            location = "Unknown"
+
         return UserSession.objects.create(
             user=user,
             refresh_token_jti=refresh_token_jti,
@@ -25,6 +36,8 @@ class SessionService:
             user_agent=user_agent,
             browser=browser,
             device=device,
+            platform=platform,
+            location=location,
             is_active=True
         )
 

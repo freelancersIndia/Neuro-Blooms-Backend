@@ -36,7 +36,11 @@ class ClinicHolidayViewSet(viewsets.ViewSet):
         )
 
     def partial_update(self, request, pk=None):
-        serializer = ClinicHolidaySerializer(data=request.data, partial=True)
+        from django.shortcuts import get_object_or_404
+        from apps.consultations.models.clinic_holiday import ClinicHoliday
+
+        holiday = get_object_or_404(ClinicHoliday, id=pk, is_active=True)
+        serializer = ClinicHolidaySerializer(holiday, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
 
         ip_address = get_client_ip(request)

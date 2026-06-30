@@ -10,6 +10,8 @@ class UserSession(models.Model):
     user_agent = models.TextField(null=True, blank=True)
     browser = models.CharField(max_length=255, null=True, blank=True)
     device = models.CharField(max_length=255, null=True, blank=True)
+    platform = models.CharField(max_length=255, null=True, blank=True)
+    location = models.CharField(max_length=255, null=True, blank=True)
     login_at = models.DateTimeField(auto_now_add=True)
     last_activity = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)

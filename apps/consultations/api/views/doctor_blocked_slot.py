@@ -37,7 +37,11 @@ class DoctorBlockedSlotViewSet(viewsets.ViewSet):
         )
 
     def partial_update(self, request, doctor_id, pk=None):
-        serializer = DoctorBlockedSlotSerializer(data=request.data, partial=True)
+        from django.shortcuts import get_object_or_404
+        from apps.consultations.models.doctor_blocked_slot import DoctorBlockedSlot
+
+        blocked_slot = get_object_or_404(DoctorBlockedSlot, id=pk, doctor_id=doctor_id, is_active=True)
+        serializer = DoctorBlockedSlotSerializer(blocked_slot, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
 
         ip_address = get_client_ip(request)

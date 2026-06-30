@@ -81,3 +81,31 @@ class UserAdminPagination(PageNumberPagination):
             }
         )
 
+
+class RolePagination(PageNumberPagination):
+    """
+    Custom pagination class for Role List API.
+    """
+    page_size = 10
+    max_page_size = 100
+    page_size_query_param = 'page_size'
+
+    def get_paginated_response(self, data):
+        total_pages = self.page.paginator.num_pages if self.page else 0
+        current_page = self.page.number if self.page else 1
+        page_size = self.get_page_size(self.request)
+        
+        return success_response(
+            message="Roles retrieved successfully.",
+            data={
+                'count': self.page.paginator.count,
+                'page': current_page,
+                'page_size': page_size,
+                'total_pages': total_pages,
+                'next': self.get_next_link(),
+                'previous': self.get_previous_link(),
+                'results': data
+            }
+        )
+
+
