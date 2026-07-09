@@ -11,6 +11,7 @@ urlpatterns = [
     path('api/v1/public/', include('apps.consultations.api.public_urls')),
     path('api/v1/appointments/', include('apps.consultations.api.appointment_urls')),
     path('api/v1/', include('apps.consultations.api.patient_matching_urls')),
+    path('api/v1/', include('apps.consultations.api.appointment_request_urls')),
     path('api/v1/consultations/', include('apps.consultations.api.consultation_urls')),
     path('api/v1/', include('apps.consultations.api.followup_urls')),
 ]

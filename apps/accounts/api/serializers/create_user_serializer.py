@@ -15,6 +15,9 @@ class CreateUserSerializer(serializers.Serializer):
     roles = serializers.ListField(child=serializers.CharField(), required=True)
     is_active = serializers.BooleanField(required=False, default=True)
     is_verified = serializers.BooleanField(required=False, default=False)
+    specialization = serializers.CharField(max_length=255, required=False, allow_null=True, allow_blank=True, default=None)
+    qualification = serializers.CharField(max_length=255, required=False, allow_null=True, allow_blank=True, default=None)
+    experience = serializers.IntegerField(required=False, min_value=0, default=0)
 
     def validate_email(self, value):
         if User.objects.filter(email__iexact=value).exists():
@@ -67,12 +70,16 @@ class CreatedUserResponseSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     roles = serializers.SerializerMethodField()
     profile_image = serializers.SerializerMethodField()
+    created_by = serializers.EmailField(source='created_by.email', read_only=True, default=None)
+    updated_by = serializers.EmailField(source='updated_by.email', read_only=True, default=None)
 
     class Meta:
         model = User
         fields = [
             'id', 'first_name', 'last_name', 'full_name', 'email', 'phone_number',
-            'profile_image', 'roles', 'is_active', 'is_verified', 'created_at'
+            'profile_image', 'roles', 'is_active', 'is_verified', 'created_at',
+            'specialization', 'qualification', 'experience', 'is_blocked',
+            'created_by', 'updated_by'
         ]
 
     def get_full_name(self, obj) -> str:

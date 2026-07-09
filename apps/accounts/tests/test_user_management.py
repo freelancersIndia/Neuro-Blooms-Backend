@@ -67,7 +67,9 @@ class UserManagementAPITests(AccountsBaseTestCase):
             'id', 'profile_image', 'full_name', 'email', 'phone', 'phone_number', 'roles',
             'is_verified', 'is_active', 'is_locked', 'failed_login_attempts',
             'last_login', 'created_at', 'updated_at',
-            'can_edit', 'can_delete', 'can_block', 'can_unlock'
+            'can_edit', 'can_delete', 'can_block', 'can_unlock',
+            'specialization', 'qualification', 'experience', 'is_blocked',
+            'created_by', 'updated_by'
         }
         self.assertEqual(set(user_data.keys()), expected_keys)
         # Ensure full_name is correctly formatted and roles is list of role names
@@ -760,3 +762,46 @@ class UserManagementAPITests(AccountsBaseTestCase):
         self.assertEqual(data['active_users'], 1)
         self.assertEqual(data['inactive_users'], 0)
         self.assertEqual(data['verified_users'], 1)
+
+    def test_create_and_update_user_fields_by_admin(self):
+        # 1. Test create user with new fields
+        url = reverse('users-list')
+        data = {
+            "first_name": "Special",
+            "last_name": "Doctor",
+            "email": "specialdoc@test.com",
+            "password": "SecurePassword@123",
+            "roles": ["DOCTOR"],
+            "specialization": "Neuro-Oncology",
+            "qualification": "MD, PhD",
+            "experience": 10
+        }
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.admin_token}')
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        user_id = response.data['data']['id']
+        self.assertEqual(response.data['data']['specialization'], "Neuro-Oncology")
+        self.assertEqual(response.data['data']['qualification'], "MD, PhD")
+        self.assertEqual(response.data['data']['experience'], 10)
+        self.assertEqual(response.data['data']['created_by'], self.admin_user.email)
+        self.assertEqual(response.data['data']['updated_by'], self.admin_user.email)
+
+        # 2. Test retrieve includes these fields
+        detail_url = reverse('users-detail', kwargs={'id': user_id})
+        response = self.client.get(detail_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['data']['specialization'], "Neuro-Oncology")
+        self.assertEqual(response.data['data']['qualification'], "MD, PhD")
+        self.assertEqual(response.data['data']['experience'], 10)
+
+        # 3. Test update (patch) these fields
+        patch_data = {
+            "specialization": "Pediatric Neurology",
+            "experience": 12
+        }
+        response = self.client.patch(detail_url, patch_data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['data']['specialization'], "Pediatric Neurology")
+        self.assertEqual(response.data['data']['qualification'], "MD, PhD")
+        self.assertEqual(response.data['data']['experience'], 12)
+        self.assertEqual(response.data['data']['updated_by'], self.admin_user.email)

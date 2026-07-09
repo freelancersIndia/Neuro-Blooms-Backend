@@ -226,7 +226,10 @@ class UserAdminViewSet(viewsets.ModelViewSet):
             is_active=validated_data.get('is_active', True),
             is_verified=validated_data.get('is_verified', False),
             admin_user=request.user,
-            ip_address=ip_address
+            ip_address=ip_address,
+            specialization=validated_data.get('specialization'),
+            qualification=validated_data.get('qualification'),
+            experience=validated_data.get('experience', 0)
         )
         
         # Track who created the user

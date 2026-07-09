@@ -23,12 +23,15 @@ class RoleListSerializer(serializers.ModelSerializer):
     permissions_count = serializers.IntegerField(read_only=True)
     can_delete = serializers.SerializerMethodField()
     can_edit = serializers.SerializerMethodField()
+    created_by = serializers.SerializerMethodField()
+    updated_by = serializers.SerializerMethodField()
 
     class Meta:
         model = Role
         fields = [
             'id', 'name', 'description', 'users_count', 'permissions_count',
-            'is_system', 'is_active', 'created_at', 'updated_at', 'can_delete', 'can_edit'
+            'is_system', 'is_active', 'created_at', 'updated_at', 'can_delete', 'can_edit',
+            'created_by', 'updated_by'
         ]
 
     def get_can_delete(self, obj):
@@ -40,6 +43,12 @@ class RoleListSerializer(serializers.ModelSerializer):
         # System roles can be edited (e.g. description/permissions), but name cannot be changed.
         # So editing is allowed, but we enforce name protection in validation.
         return True
+
+    def get_created_by(self, obj):
+        return obj.created_by.email if obj.created_by else 'System'
+
+    def get_updated_by(self, obj):
+        return obj.updated_by.email if obj.updated_by else 'System'
 
 
 class RoleDetailSerializer(serializers.ModelSerializer):
@@ -152,13 +161,13 @@ class RoleCreateUpdateSerializer(serializers.ModelSerializer):
         if queryset.exists():
             raise serializers.ValidationError("A role with this name already exists.")
         
-        if len(value) < 3 or len(value) > 50:
-            raise serializers.ValidationError("Role name must be between 3 and 50 characters.")
+        if len(value) < 3 or len(value) > 5000:
+            raise serializers.ValidationError("Role name must be between 3 and 5000 characters.")
         return value
 
     def validate_description(self, value):
-        if value and len(value) > 500:
-            raise serializers.ValidationError("Description cannot exceed 500 characters.")
+        if value and len(value) > 5000:
+            raise serializers.ValidationError("Description cannot exceed 5000 characters.")
         return value
 
     def validate_permissions(self, value):

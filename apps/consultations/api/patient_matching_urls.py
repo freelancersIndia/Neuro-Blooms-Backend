@@ -21,9 +21,4 @@ urlpatterns = [
     path('patient-matching/create-patient/', PatientCreateAPIView.as_view(), name='patient-create-patient'),
     path('patient-matching/statistics/', PatientMatchingStatisticsAPIView.as_view(), name='patient-matching-statistics'),
     path('patients/search/', PatientSearchAPIView.as_view(), name='patient-search'),
-    
-    path('appointment-requests/<uuid:id>/', AppointmentRequestDetailAPIView.as_view(), name='appointment-request-detail'),
-    path('appointment-requests/<uuid:id>/approve/', AppointmentRequestApproveAPIView.as_view(), name='appointment-request-approve'),
-    path('appointment-requests/<uuid:id>/reject/', AppointmentRequestRejectAPIView.as_view(), name='appointment-request-reject'),
-    path('appointment-requests/<uuid:id>/reschedule/', AppointmentRequestRescheduleAPIView.as_view(), name='appointment-request-reschedule'),
 ]

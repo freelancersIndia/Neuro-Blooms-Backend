@@ -148,22 +148,29 @@ class AppointmentManagementTestCase(APITestCase):
 
     def test_approve_request_success(self):
         self.client.force_authenticate(user=self.receptionist_user)
-        url = reverse("appointment-request-approve", kwargs={"id": self.request_linked.id})
-        data = {
-            "doctor_id": str(self.doctor_user.id),
-            "appointment_date": "2026-07-20",
-            "start_time": "10:00",
-            "remarks": "Approve and book"
-        }
-        response = self.client.post(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(response.data["success"])
+        # Step 1: Approve Request
+        url_approve = reverse("appointment-request-approve", kwargs={"id": self.request_linked.id})
+        response_approve = self.client.post(url_approve, {"notes": "Approve request"}, format="json")
+        self.assertEqual(response_approve.status_code, status.HTTP_200_OK)
+        self.assertTrue(response_approve.data["success"])
 
         # Verify request status updated
         self.request_linked.refresh_from_db()
         self.assertEqual(self.request_linked.status, AppointmentRequestStatus.APPROVED)
         self.assertIsNotNone(self.request_linked.reviewed_at)
         self.assertEqual(self.request_linked.reviewed_by, self.receptionist_user)
+
+        # Step 2: Convert Request to Appointment
+        url_convert = reverse("appointment-request-convert", kwargs={"id": self.request_linked.id})
+        convert_data = {
+            "doctor": str(self.doctor_user.id),
+            "appointment_date": "2026-07-20",
+            "start_time": "10:00",
+            "end_time": "10:30"
+        }
+        response_convert = self.client.post(url_convert, convert_data, format="json")
+        self.assertEqual(response_convert.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(response_convert.data["success"])
 
         # Verify appointment created
         appt = Appointment.objects.get(appointment_request=self.request_linked)
@@ -195,17 +202,22 @@ class AppointmentManagementTestCase(APITestCase):
             created_by=self.admin_user
         )
 
-        # Now try to approve request on the same slot
         self.client.force_authenticate(user=self.receptionist_user)
-        url = reverse("appointment-request-approve", kwargs={"id": self.request_linked.id})
-        data = {
-            "doctor_id": str(self.doctor_user.id),
+        # Step 1: Approve Request
+        url_approve = reverse("appointment-request-approve", kwargs={"id": self.request_linked.id})
+        response_approve = self.client.post(url_approve, {"notes": "Approve request"}, format="json")
+        self.assertEqual(response_approve.status_code, status.HTTP_200_OK)
+
+        # Step 2: Try to convert on the same slot
+        url_convert = reverse("appointment-request-convert", kwargs={"id": self.request_linked.id})
+        convert_data = {
+            "doctor": str(self.doctor_user.id),
             "appointment_date": "2026-07-20",
-            "start_time": "10:00"
+            "start_time": "10:00",
+            "end_time": "10:30"
         }
-        response = self.client.post(url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("non_field_errors", response.data["errors"])
+        response_convert = self.client.post(url_convert, convert_data, format="json")
+        self.assertEqual(response_convert.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_reject_request_success(self):
         self.client.force_authenticate(user=self.receptionist_user)

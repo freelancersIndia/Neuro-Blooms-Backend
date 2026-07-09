@@ -11,15 +11,19 @@ class UserAdminSerializer(serializers.ModelSerializer):
     roles = serializers.ListField(child=serializers.CharField(), write_only=True, required=False)
     role_names = serializers.SerializerMethodField(read_only=True)
     password = serializers.CharField(write_only=True, required=False)
+    created_by = serializers.EmailField(source='created_by.email', read_only=True, default=None)
+    updated_by = serializers.EmailField(source='updated_by.email', read_only=True, default=None)
 
     class Meta:
         model = User
         fields = [
             'id', 'email', 'phone_number', 'first_name', 'last_name',
             'profile_image', 'is_active', 'is_verified', 'password',
-            'roles', 'role_names', 'created_at', 'updated_at'
+            'roles', 'role_names', 'created_at', 'updated_at',
+            'specialization', 'qualification', 'experience', 'is_blocked',
+            'created_by', 'updated_by'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'created_by', 'updated_by']
 
     def get_role_names(self, obj) -> list:
         return [role.name for role in obj.roles.all()]
@@ -111,6 +115,8 @@ class UserListSerializer(serializers.ModelSerializer):
     can_delete = serializers.SerializerMethodField()
     can_block = serializers.SerializerMethodField()
     can_unlock = serializers.SerializerMethodField()
+    created_by = serializers.EmailField(source='created_by.email', read_only=True, default=None)
+    updated_by = serializers.EmailField(source='updated_by.email', read_only=True, default=None)
 
     class Meta:
         model = User
@@ -118,7 +124,9 @@ class UserListSerializer(serializers.ModelSerializer):
             'id', 'profile_image', 'full_name', 'email', 'phone', 'phone_number', 'roles',
             'is_verified', 'is_active', 'is_locked', 'failed_login_attempts',
             'last_login', 'created_at', 'updated_at',
-            'can_edit', 'can_delete', 'can_block', 'can_unlock'
+            'can_edit', 'can_delete', 'can_block', 'can_unlock',
+            'specialization', 'qualification', 'experience', 'is_blocked',
+            'created_by', 'updated_by'
         ]
         read_only_fields = fields
 
@@ -228,7 +236,8 @@ class UserDetailSerializer(serializers.ModelSerializer):
             'email', 'phone', 'phone_number', 'roles', 'verified', 'blocked', 'locked', 'active',
             'failed_login_attempts', 'last_login', 'created_at', 'updated_at',
             'created_by', 'updated_by', 'login_count', 'last_password_changed', 'password_expiry',
-            'can_delete', 'can_edit', 'can_block', 'can_unlock', 'can_reset_password'
+            'can_delete', 'can_edit', 'can_block', 'can_unlock', 'can_reset_password',
+            'specialization', 'qualification', 'experience'
         ]
         read_only_fields = fields
 
@@ -338,6 +347,9 @@ class UserUpdateSerializer(serializers.Serializer):
     roles = serializers.ListField(child=serializers.CharField(), required=False)
     is_active = serializers.BooleanField(required=False)
     is_verified = serializers.BooleanField(required=False)
+    specialization = serializers.CharField(max_length=255, required=False, allow_null=True, allow_blank=True)
+    qualification = serializers.CharField(max_length=255, required=False, allow_null=True, allow_blank=True)
+    experience = serializers.IntegerField(required=False, min_value=0)
 
     def validate_email(self, value):
         user = self.instance

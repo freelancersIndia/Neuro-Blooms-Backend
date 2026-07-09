@@ -27,75 +27,7 @@ class StandardResultsSetPagination(PageNumberPagination):
     max_page_size = 100
 
 
-class AppointmentRequestDetailSerializer(serializers.ModelSerializer):
-    patient_name = serializers.SerializerMethodField()
-    status_display = serializers.CharField(source="get_status_display", read_only=True)
-    appointment_type_display = serializers.CharField(source="get_appointment_type_display", read_only=True)
-    match_result = serializers.SerializerMethodField()
-    timeline = serializers.SerializerMethodField()
-
-    class Meta:
-        model = AppointmentRequest
-        fields = [
-            "id",
-            "request_number",
-            "parent_first_name",
-            "parent_last_name",
-            "relationship_to_child",
-            "mobile_number",
-            "alternate_mobile_number",
-            "email",
-            "child_first_name",
-            "child_last_name",
-            "date_of_birth",
-            "gender",
-            "appointment_type",
-            "appointment_type_display",
-            "primary_concern",
-            "preferred_date",
-            "preferred_time_slot",
-            "additional_notes",
-            "referral_source",
-            "booking_source",
-            "status",
-            "status_display",
-            "rejection_reason",
-            "reviewed_by",
-            "reviewed_at",
-            "patient",
-            "patient_name",
-            "patient_linked_by",
-            "patient_linked_at",
-            "patient_created_by",
-            "patient_created_at",
-            "match_result",
-            "timeline"
-        ]
-
-    def get_patient_name(self, obj):
-        if obj.patient:
-            return f"{obj.patient.child_first_name} {obj.patient.child_last_name}"
-        return None
-
-    def get_match_result(self, obj):
-        try:
-            return PatientMatchingService.find_matches(obj.id)
-        except Exception:
-            return None
-
-    def get_timeline(self, obj):
-        if obj.patient:
-            events = PatientTimeline.objects.filter(patient=obj.patient).order_by("created_at")
-            return [
-                {
-                    "event": event.event,
-                    "description": event.description,
-                    "performed_by_email": event.performed_by.email if event.performed_by else None,
-                    "created_at": event.created_at
-                }
-                for event in events
-            ]
-        return []
+from apps.consultations.api.serializers.appointment_request_serializers import AppointmentRequestDetailSerializer
 
 
 class AppointmentRequestDetailAPIView(APIView):
@@ -120,24 +52,31 @@ class AppointmentRequestDetailAPIView(APIView):
         "data": {
           "id": "d3b07384-d113-4956-a5d8-472d7d56637e",
           "request_number": "REQ-2026-00001",
-          "parent_first_name": "Ravi",
           ...
-          "match_result": { ... },
-          "timeline": [ ... ]
         }
       }
     """
     permission_classes = [IsAuthenticated, IsAdminOrReceptionistOrDoctorReadOnly]
 
     def get(self, request, id):
-        request_obj = AppointmentRequest.objects.filter(id=id).first()
+        request_obj = AppointmentRequest.objects.select_related(
+            'patient',
+            'reviewed_by',
+            'patient_linked_by',
+            'patient_created_by',
+            'patient__assigned_doctor'
+        ).prefetch_related(
+            'appointments',
+            'appointments__doctor'
+        ).filter(id=id).first()
+
         if not request_obj:
             return success_response(
                 message="Appointment request not found.",
                 status_code=status.HTTP_404_NOT_FOUND,
                 success=False
             )
-        serializer = AppointmentRequestDetailSerializer(request_obj)
+        serializer = AppointmentRequestDetailSerializer(request_obj, context={"request": request})
         return success_response(
             message="Appointment request retrieved.",
             data=serializer.data

@@ -22,6 +22,8 @@ from .consultation_attachment import ConsultationAttachment
 from .consultation_activity_log import ConsultationActivityLog
 from .consultation_audit_log import ConsultationAuditLog
 from .treatment_case import TreatmentCase
+from .appointment_request_timeline import AppointmentRequestTimeline
+from .appointment_request_activity_log import AppointmentRequestActivityLog
 
 __all__ = [
     'BaseModel',
@@ -48,4 +50,7 @@ __all__ = [
     'ConsultationActivityLog',
     'ConsultationAuditLog',
     'TreatmentCase',
+    'AppointmentRequestTimeline',
+    'AppointmentRequestActivityLog',
 ]
+

@@ -21,6 +21,19 @@ class AppointmentRequestStatus(models.TextChoices):
     PATIENT_CREATED = 'PATIENT_CREATED', 'Patient Created'
     RESCHEDULED = 'RESCHEDULED', 'Rescheduled'
 
+class AppointmentRequestTimelineEvent(models.TextChoices):
+    SUBMITTED = 'SUBMITTED', 'Request Submitted'
+    VIEWED = 'VIEWED', 'Viewed'
+    APPROVED = 'APPROVED', 'Approved'
+    REJECTED = 'REJECTED', 'Rejected'
+    PATIENT_CREATED = 'PATIENT_CREATED', 'Patient Created'
+    PATIENT_LINKED = 'PATIENT_LINKED', 'Patient Linked'
+    APPOINTMENT_CREATED = 'APPOINTMENT_CREATED', 'Appointment Created'
+    SUMMARY_PRINTED = 'SUMMARY_PRINTED', 'Summary Printed'
+    EXPORTED = 'EXPORTED', 'Exported'
+    NOTES_ADDED = 'NOTES_ADDED', 'Notes Added'
+
+
 class BookingSource(models.TextChoices):
     WEBSITE = 'WEBSITE', 'Website'
     ADMIN_PANEL = 'ADMIN_PANEL', 'Admin Panel'

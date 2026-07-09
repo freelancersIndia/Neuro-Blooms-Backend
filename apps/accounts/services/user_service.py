@@ -32,7 +32,10 @@ class UserService:
         is_active=None,
         is_verified=None,
         admin_user=None,
-        ip_address=None
+        ip_address=None,
+        specialization=None,
+        qualification=None,
+        experience=None
     ) -> User:
         """
         Updates an existing user's details and role assignments.
@@ -102,6 +105,21 @@ class UserService:
             if user.is_verified != is_verified:
                 user.is_verified = is_verified
                 updated_fields.append('is_verified')
+
+        if specialization is not None:
+            if user.specialization != specialization:
+                user.specialization = specialization
+                updated_fields.append('specialization')
+
+        if qualification is not None:
+            if user.qualification != qualification:
+                user.qualification = qualification
+                updated_fields.append('qualification')
+
+        if experience is not None:
+            if user.experience != experience:
+                user.experience = experience
+                updated_fields.append('experience')
 
         if admin_user:
             user.updated_by = admin_user

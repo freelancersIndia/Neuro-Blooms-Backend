@@ -52,9 +52,10 @@ class AuthService:
 
         # Generate SimpleJWT tokens
         refresh = RefreshToken.for_user(user)
+        jti = refresh.payload.get('jti')
+        refresh.access_token['session_jti'] = jti
         access_token = str(refresh.access_token)
         refresh_token = str(refresh)
-        jti = refresh.payload.get('jti')
 
         # Create active device session
         SessionService.create_session(
@@ -63,6 +64,10 @@ class AuthService:
             ip_address=ip_address,
             user_agent=user_agent
         )
+
+        # Update last login timestamp
+        from django.contrib.auth.models import update_last_login
+        update_last_login(None, user)
 
         # Log successful login
         ActivityLog.objects.create(

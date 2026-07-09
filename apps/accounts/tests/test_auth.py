@@ -342,3 +342,30 @@ class AccountsAuthTests(AccountsBaseTestCase):
         self.assertEqual(response.data['data']['email'], 'doctor@test.com')
         self.assertEqual(response.data['data']['first_name'], 'Doctor')
         self.assertEqual(response.data['data']['last_name'], 'User')
+        self.assertIsNone(response.data['data']['specialization'])
+        self.assertEqual(response.data['data']['qualification'], None)
+        self.assertEqual(response.data['data']['experience'], 0)
+        self.assertTrue(response.data['data']['is_active'])
+        self.assertIsNotNone(response.data['data']['last_login'])
+
+        # Update profile details
+        patch_data = {
+            'first_name': 'UpdatedDoctor',
+            'specialization': 'Neuroscience',
+            'qualification': 'PhD',
+            'experience': 5
+        }
+        response = self.client.patch(url, patch_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['success'])
+        self.assertEqual(response.data['data']['first_name'], 'UpdatedDoctor')
+        self.assertEqual(response.data['data']['specialization'], 'Neuroscience')
+        self.assertEqual(response.data['data']['qualification'], 'PhD')
+        self.assertEqual(response.data['data']['experience'], 5)
+
+        # Verify DB changes
+        self.doctor_user.refresh_from_db()
+        self.assertEqual(self.doctor_user.first_name, 'UpdatedDoctor')
+        self.assertEqual(self.doctor_user.specialization, 'Neuroscience')
+        self.assertEqual(self.doctor_user.qualification, 'PhD')
+        self.assertEqual(self.doctor_user.experience, 5)

@@ -135,3 +135,20 @@ class IsDoctorWriteOrAdminOrReceptionistReadOnly(permissions.BasePermission):
         )
 
 
+class IsAdminOrReceptionist(permissions.BasePermission):
+    """
+    Allows access only to users with ADMIN or RECEPTIONIST role, or superusers.
+    """
+    def has_permission(self, request, view) -> bool:
+        return (
+            request.user and
+            request.user.is_authenticated and
+            (
+                request.user.is_superuser or
+                request.user.has_role('ADMIN') or
+                request.user.has_role('RECEPTIONIST')
+            )
+        )
+
+
+

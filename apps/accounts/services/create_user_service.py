@@ -20,7 +20,10 @@ class CreateUserService:
         is_active: bool = True,
         is_verified: bool = False,
         admin_user = None,
-        ip_address: str = None
+        ip_address: str = None,
+        specialization: str = None,
+        qualification: str = None,
+        experience: int = 0
     ) -> User:
         """
         Creates a new user, hashes the password, assigns roles, saves profile image,
@@ -36,7 +39,12 @@ class CreateUserService:
             is_active=is_active,
             is_verified=is_verified,
             is_staff=True,
-            is_superuser=False
+            is_superuser=False,
+            created_by=admin_user,
+            updated_by=admin_user,
+            specialization=specialization,
+            qualification=qualification,
+            experience=experience
         )
         user.set_password(password)
         user.save()

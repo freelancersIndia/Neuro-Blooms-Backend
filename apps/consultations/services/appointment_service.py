@@ -520,6 +520,7 @@ class AppointmentService:
         # Update request preferred slot details
         old_date = request_obj.preferred_date
         old_time = request_obj.preferred_time_slot
+        old_status = request_obj.status
 
         request_obj.preferred_date = appointment_date
         request_obj.preferred_time_slot = f"{start_time.strftime('%H:%M')}"
@@ -534,6 +535,30 @@ class AppointmentService:
                 description=f"Appointment request rescheduled from {old_date} {old_time} to {appointment_date} {start_time.strftime('%H:%M')}. Reason: {reason}",
                 performed_by=user
             )
+
+        # Create Request-Specific Timeline and Activity Logs
+        from apps.consultations.services.appointment_request_service import AppointmentRequestService
+        from apps.consultations.choices import AppointmentRequestTimelineEvent
+
+        AppointmentRequestService.log_timeline(
+            appointment_request=request_obj,
+            event_code=AppointmentRequestTimelineEvent.RESCHEDULED,
+            title="Rescheduled",
+            description=f"Preferred slot changed from {old_date} ({old_time}) to {appointment_date} ({start_time.strftime('%H:%M')}). Reason: {reason}",
+            performed_by=user,
+            icon="event",
+            color="orange",
+            metadata={"old_date": str(old_date), "old_slot": old_time, "new_date": str(appointment_date), "new_slot": start_time.strftime('%H:%M'), "reason": reason}
+        )
+
+        AppointmentRequestService.log_activity(
+            appointment_request=request_obj,
+            action="Status Changed",
+            performed_by=user,
+            old_values={"preferred_date": str(old_date), "preferred_time_slot": old_time, "status": old_status},
+            new_values={"preferred_date": str(appointment_date), "preferred_time_slot": start_time.strftime('%H:%M'), "status": "RESCHEDULED"},
+            ip_address=ip_address
+        )
 
         # Log Activity
         desc = f"{user.email} rescheduled appointment request {request_obj.request_number} to {appointment_date} at {start_time.strftime('%H:%M')}."

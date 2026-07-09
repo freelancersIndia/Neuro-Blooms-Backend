@@ -10,13 +10,23 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True)
 
 class UserSessionSerializer(serializers.ModelSerializer):
+    is_current = serializers.SerializerMethodField()
+
     class Meta:
         model = UserSession
         fields = [
-            'id', 'ip_address', 'browser', 'device',
-            'login_at', 'last_activity', 'is_active'
+            'id', 'ip_address', 'browser', 'device', 'location',
+            'login_at', 'last_activity', 'is_active', 'is_current'
         ]
         read_only_fields = fields
+
+    def get_is_current(self, obj) -> bool:
+        request = self.context.get('request')
+        if not request or not request.auth:
+            return False
+        # Retrieve session_jti from the access token payload
+        session_jti = request.auth.get('session_jti')
+        return obj.refresh_token_jti == session_jti
 
 class CustomTokenRefreshSerializer(TokenRefreshSerializer):
     def validate(self, attrs):
@@ -46,6 +56,13 @@ class CustomTokenRefreshSerializer(TokenRefreshSerializer):
             new_jti = new_refresh.payload.get('jti')
             session.refresh_token_jti = new_jti
             session.save()
+            # Inject new session JTI into the rotated access token
+            new_refresh.access_token['session_jti'] = new_jti
+            data['access'] = str(new_refresh.access_token)
+        else:
+            # If refresh token was not rotated, inject the current JTI into the new access token
+            refresh_token.access_token['session_jti'] = jti
+            data['access'] = str(refresh_token.access_token)
 
         # Update last activity timestamp
         session.last_activity = now
